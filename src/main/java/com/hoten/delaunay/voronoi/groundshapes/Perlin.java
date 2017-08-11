@@ -22,6 +22,15 @@ public class Perlin implements HeightAlgorithm {
     private final float noise[][];
 
     /**
+     *
+     * @param random Randomizer.
+     * @param octaveCount Smooth value. 0 means there will be only white noise.
+     */
+    public Perlin(Random random, int octaveCount) {
+        this(random, octaveCount, 256, 256);
+    }
+
+    /**
      * @param random Randomizer.
      * @param octaveCount Smooth value. 0 means there will be only white noise.
      * @param noiseWidth Width of noise map. Should be less than graph width.
@@ -35,6 +44,16 @@ public class Perlin implements HeightAlgorithm {
         noise = generatePerlinNoise(whiteNoise, octaveCount);
 
         median = findMedian();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isWater(Point p, Rectangle bounds, Random random) {
+        int x = (int) (p.x / bounds.width * (noise.length - 1));
+
+        int y = (int) (p.y / bounds.height * (noise[0].length - 1));
+
+        return noise[x][y] < median;
     }
 
     /**
@@ -61,25 +80,6 @@ public class Perlin implements HeightAlgorithm {
         }
 
         return (float) (n + 0.5) / 10;
-    }
-
-    /**
-     *
-     * @param random Randomizer.
-     * @param octaveCount Smooth value. 0 means there will be only white noise.
-     */
-    public Perlin(Random random, float centrical, int octaveCount) {
-        this(random, octaveCount, 256, 256);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public boolean isWater(Point p, Rectangle bounds, Random random) {
-        int x = (int) (p.x / bounds.width * (noise.length - 1));
-
-        int y = (int) (p.y / bounds.height * (noise[0].length - 1));
-
-        return noise[x][y] < median;
     }
 
     /**

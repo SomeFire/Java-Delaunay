@@ -17,34 +17,41 @@ import java.util.*;
  */
 public abstract class VoronoiGraph {
 
-    final public ArrayList<Edge> edges = new ArrayList();
-    final public ArrayList<Corner> corners = new ArrayList();
-    final public ArrayList<Center> centers = new ArrayList();
-    final public Rectangle bounds;
-    final private Random r;
+    private final ArrayList<Edge> edges = new ArrayList<>();
+    private final ArrayList<Corner> corners = new ArrayList<>();
+    private final ArrayList<Center> centers = new ArrayList<>();
+    private final Rectangle bounds;
+    private final Random r;
     protected Color OCEAN, RIVER, LAKE, BEACH;
-    final public BufferedImage pixelCenterMap;
+    private final BufferedImage pixelCenterMap;
 
     public VoronoiGraph(Voronoi v, int numLloydRelaxations, Random r, HeightAlgorithm algorithm) {
         this.r = r;
         bounds = v.get_plotBounds();
+
         for (int i = 0; i < numLloydRelaxations; i++) {
             ArrayList<Point> points = v.siteCoords();
+
             for (Point p : points) {
                 ArrayList<Point> region = v.region(p);
+
                 double x = 0;
                 double y = 0;
+
                 for (Point c : region) {
                     x += c.x;
                     y += c.y;
                 }
+
                 x /= region.size();
                 y /= region.size();
                 p.x = x;
                 p.y = y;
             }
+
             v = new Voronoi(points, null, v.get_plotBounds());
         }
+
         buildGraph(v);
         improveCorners();
 
@@ -70,22 +77,27 @@ public abstract class VoronoiGraph {
 
     private void improveCorners() {
         Point[] newP = new Point[corners.size()];
+
         for (Corner c : corners) {
             if (c.border) {
                 newP[c.index] = c.loc;
             } else {
                 double x = 0;
                 double y = 0;
+
                 for (Center center : c.touches) {
                     x += center.loc.x;
                     y += center.loc.y;
                 }
+
                 newP[c.index] = new Point(x / c.touches.size(), y / c.touches.size());
             }
         }
+
         corners.stream().forEach((c) -> {
             c.loc = newP[c.index];
         });
+
         edges.stream().filter((e) -> (e.v0 != null && e.v1 != null)).forEach((e) -> {
             e.setVornoi(e.v0, e.v1);
         });
@@ -97,6 +109,7 @@ public abstract class VoronoiGraph {
                 return e;
             }
         }
+
         return null;
     }
 
@@ -109,6 +122,7 @@ public abstract class VoronoiGraph {
         y[1] = (int) c1.loc.y;
         x[2] = (int) c2.loc.x;
         y[2] = (int) c2.loc.y;
+
         g.fillPolygon(x, y, 3);
     }
 
@@ -121,6 +135,7 @@ public abstract class VoronoiGraph {
         int height = (int) bounds.height;
 
         final BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_4BYTE_ABGR);
+
         Graphics2D g = img.createGraphics();
 
         paint(g);
@@ -128,7 +143,7 @@ public abstract class VoronoiGraph {
         return img;
     }
 
-    public void paint(Graphics2D g) {
+    private void paint(Graphics2D g) {
         paint(g, true, true, false, false, false, true);
     }
 
@@ -139,6 +154,7 @@ public abstract class VoronoiGraph {
         Corner edgeCorner1 = null;
         Corner edgeCorner2 = null;
         c.area = 0;
+
         for (Center n : c.neighbors) {
             Edge e = edgeWithCenters(c, n);
 
@@ -162,6 +178,7 @@ public abstract class VoronoiGraph {
             }
 
             drawTriangle(g, e.v0, e.v1, c);
+
             c.area += Math.abs(c.loc.x * (e.v0.loc.y - e.v1.loc.y)
                     + e.v0.loc.x * (e.v1.loc.y - c.loc.y)
                     + e.v1.loc.x * (c.loc.y - e.v0.loc.y)) / 2;
@@ -188,8 +205,10 @@ public abstract class VoronoiGraph {
                 y[1] = (int) edgeCorner1.loc.y;
 
                 //determine which corner this is
-                x[2] = (int) ((closeEnough(edgeCorner1.loc.x, bounds.x, 1) || closeEnough(edgeCorner2.loc.x, bounds.x, .5)) ? bounds.x : bounds.right);
-                y[2] = (int) ((closeEnough(edgeCorner1.loc.y, bounds.y, 1) || closeEnough(edgeCorner2.loc.y, bounds.y, .5)) ? bounds.y : bounds.bottom);
+                x[2] = (int) ((closeEnough(edgeCorner1.loc.x, bounds.x, 1) ||
+                    closeEnough(edgeCorner2.loc.x, bounds.x, .5)) ? bounds.x : bounds.right);
+                y[2] = (int) ((closeEnough(edgeCorner1.loc.y, bounds.y, 1) ||
+                    closeEnough(edgeCorner2.loc.y, bounds.y, .5)) ? bounds.y : bounds.bottom);
 
                 x[3] = (int) edgeCorner2.loc.x;
                 y[3] = (int) edgeCorner2.loc.y;
@@ -201,7 +220,8 @@ public abstract class VoronoiGraph {
     }
 
     //also records the area of each voronoi cell
-    public void paint(Graphics2D g, boolean drawBiomes, boolean drawRivers, boolean drawSites, boolean drawCorners, boolean drawDelaunay, boolean drawVoronoi) {
+    private void paint(Graphics2D g, boolean drawBiomes, boolean drawRivers, boolean drawSites, boolean drawCorners,
+        boolean drawDelaunay, boolean drawVoronoi) {
         final int numSites = centers.size();
 
         Color[] defaultColors = null;
@@ -226,6 +246,7 @@ public abstract class VoronoiGraph {
                 g.setColor(Color.YELLOW);
                 g.drawLine((int) e.d0.loc.x, (int) e.d0.loc.y, (int) e.d1.loc.x, (int) e.d1.loc.y);
             }
+
             if (drawRivers && e.river > 0) {
                 g.setStroke(new BasicStroke(1 + (int) Math.sqrt(e.river * 2)));
                 g.setColor(RIVER);
@@ -251,7 +272,7 @@ public abstract class VoronoiGraph {
     }
 
     private void buildGraph(Voronoi v) {
-        final HashMap<Point, Center> pointCenterMap = new HashMap();
+        final HashMap<Point, Center> pointCenterMap = new HashMap<>();
         final ArrayList<Point> points = v.siteCoords();
         points.stream().forEach((p) -> {
             Center c = new Center();
@@ -349,23 +370,30 @@ public abstract class VoronoiGraph {
         if (p == null) {
             return null;
         }
+
         int index = (int) ((int) p.x + (int) (p.y) * bounds.width * 2);
+
         Corner c = pointCornerMap.get(index);
+
         if (c == null) {
             c = new Corner();
             c.loc = p;
             c.border = bounds.liesOnAxes(p);
             c.index = corners.size();
             corners.add(c);
+
             pointCornerMap.put(index, c);
         }
+
         return c;
     }
 
     private void assignCornerElevations(HeightAlgorithm algorithm) {
-        LinkedList<Corner> queue = new LinkedList();
+        LinkedList<Corner> queue = new LinkedList<>();
+
         for (Corner c : corners) {
             c.water = algorithm.isWater(c.loc, bounds, r);
+
             if (c.border) {
                 c.elevation = 0;
                 queue.add(c);
@@ -376,11 +404,14 @@ public abstract class VoronoiGraph {
 
         while (!queue.isEmpty()) {
             Corner c = queue.pop();
+
             for (Corner a : c.adjacent) {
                 double newElevation = 0.01 + c.elevation;
+
                 if (!c.water && !a.water) {
                     newElevation += 1;
                 }
+
                 if (newElevation < a.elevation) {
                     a.elevation = newElevation;
                     queue.add(a);
@@ -390,23 +421,29 @@ public abstract class VoronoiGraph {
     }
 
     private void assignOceanCoastAndLand() {
-        LinkedList<Center> queue = new LinkedList();
+        LinkedList<Center> queue = new LinkedList<>();
         final double waterThreshold = .3;
+
         for (final Center center : centers) {
             int numWater = 0;
+
             for (final Corner c : center.corners) {
                 if (c.border) {
                     center.border = center.water = center.ocean = true;
                     queue.add(center);
                 }
+
                 if (c.water) {
                     numWater++;
                 }
             }
+
             center.water = center.ocean || ((double) numWater / center.corners.size() >= waterThreshold);
         }
+
         while (!queue.isEmpty()) {
             final Center center = queue.pop();
+
             for (final Center n : center.neighbors) {
                 if (n.water && !n.ocean) {
                     n.ocean = true;
@@ -414,23 +451,28 @@ public abstract class VoronoiGraph {
                 }
             }
         }
+
         for (Center center : centers) {
             boolean oceanNeighbor = false;
             boolean landNeighbor = false;
+
             for (Center n : center.neighbors) {
                 oceanNeighbor |= n.ocean;
                 landNeighbor |= !n.water;
             }
+
             center.coast = oceanNeighbor && landNeighbor;
         }
 
         for (Corner c : corners) {
             int numOcean = 0;
             int numLand = 0;
+
             for (Center center : c.touches) {
                 numOcean += center.ocean ? 1 : 0;
                 numLand += !center.water ? 1 : 0;
             }
+
             c.ocean = numOcean == c.touches.size();
             c.coast = numOcean > 0 && numLand > 0;
             c.water = c.border || ((numLand != c.touches.size()) && !c.coast);
@@ -438,12 +480,14 @@ public abstract class VoronoiGraph {
     }
 
     private ArrayList<Corner> landCorners() {
-        final ArrayList<Corner> list = new ArrayList();
+        final ArrayList<Corner> list = new ArrayList<>();
+
         for (Corner c : corners) {
             if (!c.ocean && !c.coast) {
                 list.add(c);
             }
         }
+
         return list;
     }
 
@@ -478,9 +522,11 @@ public abstract class VoronoiGraph {
     private void assignPolygonElevations() {
         for (Center center : centers) {
             double total = 0;
+
             for (Corner c : center.corners) {
                 total += c.elevation;
             }
+
             center.elevation = total / center.corners.size();
         }
     }
@@ -495,6 +541,7 @@ public abstract class VoronoiGraph {
                     down = a;
                 }
             }
+
             c.downslope = down;
         }
     }
@@ -502,20 +549,25 @@ public abstract class VoronoiGraph {
     private void createRivers() {
         for (int i = 0; i < bounds.width / 2; i++) {
             Corner c = corners.get(r.nextInt(corners.size()));
+
             if (c.ocean || c.elevation < 0.3 || c.elevation > 0.9) {
                 continue;
             }
+
             // Bias rivers to go west: if (q.downslope.x > q.x) continue;
             while (!c.coast) {
                 if (c == c.downslope) {
                     break;
                 }
+
                 Edge edge = lookupEdgeFromCorner(c, c.downslope);
+
                 if (!edge.v0.water || !edge.v1.water) {
                     edge.river++;
                     c.river++;
                     c.downslope.river++;  // TODO: fix double count
                 }
+
                 c = c.downslope;
             }
         }
@@ -531,7 +583,8 @@ public abstract class VoronoiGraph {
     }
 
     private void assignCornerMoisture() {
-        LinkedList<Corner> queue = new LinkedList();
+        LinkedList<Corner> queue = new LinkedList<>();
+
         for (Corner c : corners) {
             if ((c.water || c.river > 0) && !c.ocean) {
                 c.moisture = c.river > 0 ? Math.min(3.0, (0.2 * c.river)) : 1.0;
@@ -572,6 +625,7 @@ public abstract class VoronoiGraph {
                 return 0;
             }
         });
+
         for (int i = 0; i < landCorners.size(); i++) {
             landCorners.get(i).moisture = (double) i / landCorners.size();
         }
@@ -580,9 +634,11 @@ public abstract class VoronoiGraph {
     private void assignPolygonMoisture() {
         for (Center center : centers) {
             double total = 0;
+
             for (Corner c : center.corners) {
                 total += c.moisture;
             }
+
             center.moisture = total / center.corners.size();
         }
     }

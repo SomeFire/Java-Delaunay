@@ -7,9 +7,6 @@ package com.hoten.delaunay.geom;
  */
 public class Point {
 
-    public static double distance(Point _coord, Point _coord0) {
-        return Math.sqrt((_coord.x - _coord0.x) * (_coord.x - _coord0.x) + (_coord.y - _coord0.y) * (_coord.y - _coord0.y));
-    }
     public double x, y;
 
     public Point(double x, double y) {

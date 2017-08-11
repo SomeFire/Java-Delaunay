@@ -18,14 +18,14 @@ public class Radial implements HeightAlgorithm {
 
     /**
      *
-     * @param ISLAND_FACTOR 1.0 means no small islands, 2.0 leads to a lot
+     * @param ISLAND_FACTOR 0 means no small islands, 1.0 leads to a lot
      * @param bumps
-     * @param startAngle
+     * @param startAngle Starting angle to "draw" shape.
      * @param dipAngle
      * @param dipWidth
      */
     public Radial(double ISLAND_FACTOR, int bumps, double startAngle, double dipAngle, double dipWidth) {
-        this.ISLAND_FACTOR = ISLAND_FACTOR;
+        this.ISLAND_FACTOR = ISLAND_FACTOR - (int) ISLAND_FACTOR + 1;
         this.bumps = bumps;
         this.startAngle = startAngle;
         this.dipAngle = dipAngle;
