@@ -81,15 +81,37 @@ public final class Voronoi {
         fortunesAlgorithm();
     }
 
-    //TODO check points for negative values. We must search min value too and translate whole list to fit it in positive quadrant.
     public Voronoi(ArrayList<Point> points, ArrayList<Color> colors) {
         double maxWidth = 0, maxHeight = 0;
+        double shiftX = 0, shiftY = 0;
+
         for (Point p : points) {
             maxWidth = Math.max(maxWidth, p.x);
             maxHeight = Math.max(maxHeight, p.y);
+
+            if (p.x < shiftX)
+                shiftX = p.x;
+
+            if (p.y < shiftY)
+                shiftY = p.y;
         }
-        System.out.println(maxWidth + "," + maxHeight);
+
+        if (shiftX != 0 || shiftY != 0) {
+            ArrayList<Point> newPoints = new ArrayList<>();
+
+            for (Point p : points)
+                newPoints.add(new Point(p.x - shiftX, p.y - shiftY));
+
+            maxWidth -= shiftX;
+            maxHeight -= shiftY;
+
+            points = newPoints;
+        }
+
+        System.out.println("Graph bounds: width = " + maxWidth + ", height = " + maxHeight);
+
         init(points, colors, new Rectangle(0, 0, maxWidth, maxHeight));
+
         fortunesAlgorithm();
     }
 
