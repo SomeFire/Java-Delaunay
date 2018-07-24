@@ -64,7 +64,7 @@ public class TestDriver {
         HeightAlgorithm algorithm = getAlgorithmImplementation(r, algorithmName);
 
         //make the intial underlying voronoi structure
-        final Voronoi v = new Voronoi(numSites, bounds, bounds, r, null);
+        final Voronoi v = new Voronoi(numSites, bounds, bounds, r);
 
         //assemble the voronoi strucutre into a usable graph object representing a map
         final TestGraphImpl graph = new TestGraphImpl(v, numLloydRelaxations, r, algorithm);

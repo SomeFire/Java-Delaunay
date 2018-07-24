@@ -11,8 +11,9 @@ import java.util.Random;
  * Change variables here to customize voronoi graph.
  */
 class Variables {
+
     /** Do you really need to save image? */
-    static final boolean SAVE_FILE = true;
+    static final boolean SAVE_FILE = false;
 
     /** The side of the square in which the graph will be fitted. */
     static final int GRAPH_BOUNDS = 2048;

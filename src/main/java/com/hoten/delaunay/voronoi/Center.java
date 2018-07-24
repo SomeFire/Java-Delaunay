@@ -2,29 +2,44 @@ package com.hoten.delaunay.voronoi;
 
 import com.hoten.delaunay.geom.Point;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Center.java
+ * Represents center of voronoi graph and corner of the delaunay triangulation in the same time.
  *
  * @author Connor
  */
 public class Center {
 
-    public int index;
-    public Point loc;
-    public ArrayList<Corner> corners = new ArrayList<>();//good
-    public ArrayList<Center> neighbors = new ArrayList<>();//good
-    public ArrayList<Edge> borders = new ArrayList<>();
+    /** Center index in graph. */
+    public final int index;
+
+    /** Center position. */
+    public final Point loc;
+
+    public List<Corner> corners = new ArrayList<>();
+
+    public List<Center> neighbors = new ArrayList<>();
+
+    public List<Edge> borders = new ArrayList<>();
+
     public boolean border, ocean, water, coast;
+
     public double elevation;
+
     public double moisture;
+
+    /** Biome. */
     public Enum biome;
+
     public double area;
 
-    public Center() {
-    }
-
-    public Center(Point loc) {
+    /**
+     * @param index
+     * @param loc Center position.
+     */
+    public Center(int index, Point loc) {
+        this.index = index;
         this.loc = loc;
     }
 }

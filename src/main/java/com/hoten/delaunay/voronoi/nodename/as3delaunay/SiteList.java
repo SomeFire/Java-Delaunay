@@ -3,73 +3,87 @@ package com.hoten.delaunay.voronoi.nodename.as3delaunay;
 import com.hoten.delaunay.geom.Point;
 import com.hoten.delaunay.geom.Rectangle;
 import java.util.ArrayList;
+import java.util.List;
 
-public final class SiteList implements IDisposable {
+/**
+ * Internal list for sites.
+ */
+final class SiteList {
 
-    private ArrayList<Site> _sites;
-    private int _currentIndex;
-    private boolean _sorted;
+    /** Site list. */
+    private final List<Site> sites = new ArrayList<>();
 
-    public SiteList() {
-        _sites = new ArrayList();
-        _sorted = false;
+    /** Index to iterate over collection. */
+    private int currentIndex;
+
+    /** */
+    private boolean sorted;
+
+    /**
+     * @param site Site.
+     * @return New site list size.
+     */
+    public int add(Site site) {
+        sorted = false;
+        sites.add(site);
+        return sites.size();
     }
 
-    @Override
-    public void dispose() {
-        if (_sites != null) {
-            for (Site site : _sites) {
-                site.dispose();
-            }
-            _sites.clear();
-            _sites = null;
-        }
+    /**
+     * @return Site count.
+     */
+    public int size() {
+        return sites.size();
     }
 
-    public int push(Site site) {
-        _sorted = false;
-        _sites.add(site);
-        return _sites.size();
-    }
-
-    public int get_length() {
-        return _sites.size();
-    }
-
+    /**
+     * @return Iterate to the next site.
+     * @throws IllegalStateException If sites are not sorted.
+     */
     public Site next() {
-        if (_sorted == false) {
-            throw new Error("SiteList::next():  sites have not been sorted");
-        }
-        if (_currentIndex < _sites.size()) {
-            return _sites.get(_currentIndex++);
-        } else {
-            return null;
+        if (!sorted)
+            throw new IllegalStateException("SiteList::next():  sites have not been sorted");
+
+        if (currentIndex < sites.size())
+            return sites.get(currentIndex++);
+
+        return null;
+    }
+
+    /**
+     * If not sorted - sort sites and reset iterator.
+     */
+    public void sort() {
+        if (!sorted) {
+            Site.sortSites(sites);
+            currentIndex = 0;
+            sorted = true;
         }
     }
 
+    /**
+     * @return Bounds where all sites fitted.
+     */
     public Rectangle getSitesBounds() {
-        if (_sorted == false) {
-            Site.sortSites(_sites);
-            _currentIndex = 0;
-            _sorted = true;
-        }
         double xmin, xmax, ymin, ymax;
-        if (_sites.isEmpty()) {
+
+        if (sites.isEmpty())
             return new Rectangle(0, 0, 0, 0);
-        }
+
         xmin = Double.MAX_VALUE;
         xmax = Double.MIN_VALUE;
-        for (Site site : _sites) {
-            if (site.get_x() < xmin) {
-                xmin = site.get_x();
-            }
-            if (site.get_x() > xmax) {
-                xmax = site.get_x();
-            }
+
+        for (Site site : sites) {
+            if (site.getX() < xmin)
+                xmin = site.getX();
+
+            if (site.getX() > xmax)
+                xmax = site.getX();
         }
+
         // here's where we assume that the sites have been sorted on y:
-        ymin = _sites.get(0).get_y();
-        ymax = _sites.get(_sites.size() - 1).get_y();
+        ymin = sites.get(0).getY();
+        ymax = sites.get(sites.size() - 1).getY();
 
         return new Rectangle(xmin, ymin, xmax - xmin, ymax - ymin);
     }
@@ -77,48 +91,62 @@ public final class SiteList implements IDisposable {
     /*public ArrayList<Color> siteColors(referenceImage:BitmapData = null)
      {
      var colors:Vector.<uint> = new Vector.<uint>();
-     for each (var site:Site in _sites)
+     for each (var site:Site in sites)
      {
-     colors.push(referenceImage ? referenceImage.getPixel(site.x, site.y) : site.color);
+     colors.add(referenceImage ? referenceImage.getPixel(site.x, site.y) : site.color);
      }
      return colors;
      }*/
-    public ArrayList<Point> siteCoords() {
-        ArrayList<Point> coords = new ArrayList();
-        for (Site site : _sites) {
-            coords.add(site.get_coord());
-        }
+
+    /**
+     * @return Coordinates of all sites in this site list.
+     */
+    public List<Point> siteCoords() {
+        List<Point> coords = new ArrayList<>();
+
+        for (Site site : sites)
+            coords.add(site.getPosition());
+
         return coords;
     }
 
     /**
-     *
      * @return the largest circle centered at each site that fits in its region;
      * if the region is infinite, return a circle of radius 0.
-     *
      */
-    public ArrayList<Circle> circles() {
-        ArrayList<Circle> circles = new ArrayList();
-        for (Site site : _sites) {
+    public List<Circle> circles() {
+        List<Circle> circles = new ArrayList<>();
+
+        for (Site site : sites) {
             double radius = 0;
+
             Edge nearestEdge = site.nearestEdge();
 
             //!nearestEdge.isPartOfConvexHull() && (radius = nearestEdge.sitesDistance() * 0.5);
-            if (!nearestEdge.isPartOfConvexHull()) {
+            if (!nearestEdge.isPartOfConvexHull())
                 radius = nearestEdge.sitesDistance() * 0.5;
-            }
-            circles.add(new Circle(site.get_x(), site.get_y(), radius));
+
+            circles.add(new Circle(site.getX(), site.getY(), radius));
         }
+
         return circles;
     }
 
-    public ArrayList<ArrayList<Point>> regions(Rectangle plotBounds) {
-        ArrayList<ArrayList<Point>> regions = new ArrayList();
-        for (Site site : _sites) {
+    /**
+     * Region is continuous line represented as a sequence of points clipped in graph bounds.
+     *
+     * @param plotBounds Graph bounds.
+     * @return Regions for sites in this site list.
+     */
+    public List<List<Point>> regions(Rectangle plotBounds) {
+        List<List<Point>> regions = new ArrayList<>();
+
+        for (Site site : sites)
             regions.add(site.region(plotBounds));
-        }
+
         return regions;
     }
+
     /**
      *
      * @param proximityMap a BitmapData whose regions are filled with the site
@@ -131,10 +159,10 @@ public final class SiteList implements IDisposable {
     /*public Point nearestSitePoint(proximityMap:BitmapData, double x, double y)
      {
      var index:uint = proximityMap.getPixel(x, y);
-     if (index > _sites.length - 1)
+     if (index > sites.length - 1)
      {
      return null;
      }
-     return _sites[index].coord;
+     return sites[index].coord;
      }*/
 }

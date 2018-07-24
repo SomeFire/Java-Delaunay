@@ -28,60 +28,44 @@ package com.hoten.delaunay.voronoi.nodename.as3delaunay;
  * OF THIS SOFTWARE OR ITS FITNESS FOR ANY PARTICULAR PURPOSE.
  */
 
+import com.hoten.delaunay.geom.GenUtils;
 import com.hoten.delaunay.geom.Point;
 import com.hoten.delaunay.geom.Rectangle;
 
-import java.awt.Color;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 public final class Voronoi {
 
-    private SiteList _sites;
-    private HashMap<Point, Site> _sitesIndexedByLocation;
-    private ArrayList<Triangle> _triangles;
-    private ArrayList<Edge> _edges;
+    private SiteList sites;
+    private Map<Point, Site> center2siteMap;
+    private List<Triangle> _triangles;
+    private List<Edge> edges;
     // TODO generalize this so it doesn't have to be a rectangle;
     // then we can make the fractal voronois-within-voronois
-    private Rectangle _plotBounds;
+    /** Graph bounds. */
+    private Rectangle plotBounds;
 
-    public Rectangle get_plotBounds() {
-        return _plotBounds;
+    public Rectangle getPlotBounds() {
+        return plotBounds;
     }
 
-    public void dispose() {
-        int i, n;
-        if (_sites != null) {
-            _sites.dispose();
-            _sites = null;
-        }
-        if (_triangles != null) {
-            n = _triangles.size();
-            for (i = 0; i < n; ++i) {
-                _triangles.get(i).dispose();
-            }
-            _triangles.clear();
-            _triangles = null;
-        }
-        if (_edges != null) {
-            n = _edges.size();
-            for (i = 0; i < n; ++i) {
-                _edges.get(i).dispose();
-            }
-            _edges.clear();
-            _edges = null;
-        }
-        _plotBounds = null;
-        _sitesIndexedByLocation = null;
-    }
-
-    public Voronoi(ArrayList<Point> points, ArrayList<Color> colors, Rectangle plotBounds) {
-        init(points, colors, plotBounds);
+    /**
+     * @param points Graph points.
+     * @param plotBounds Bounds.
+     */
+    public Voronoi(List<Point> points, Rectangle plotBounds) {
+        init(points, plotBounds);
         fortunesAlgorithm();
     }
 
-    public Voronoi(ArrayList<Point> points, ArrayList<Color> colors) {
+    /**
+     * @param points Graph points.
+     */
+    public Voronoi(List<Point> points) {
         double maxWidth = 0, maxHeight = 0;
         double shiftX = 0, shiftY = 0;
 
@@ -110,82 +94,101 @@ public final class Voronoi {
 
         System.out.println("Graph bounds: width = " + maxWidth + ", height = " + maxHeight);
 
-        init(points, colors, new Rectangle(0, 0, maxWidth, maxHeight));
+        init(points,  new Rectangle(0, 0, maxWidth, maxHeight));
 
         fortunesAlgorithm();
     }
 
-    public Voronoi(int numSites, double maxWidth, double maxHeight, Random r, ArrayList<Color> colors) {
-        ArrayList<Point> points = new ArrayList();
-        for (int i = 0; i < numSites; i++) {
+    /**
+     * @param numSites Amount of sites.
+     * @param maxWidth Graph width.
+     * @param maxHeight Graph height.
+     * @param r Randomizer.
+     */
+    public Voronoi(int numSites, double maxWidth, double maxHeight, Random r) {
+        ArrayList<Point> points = new ArrayList<>();
+
+        for (int i = 0; i < numSites; i++)
             points.add(new Point(r.nextDouble() * maxWidth, r.nextDouble() * maxHeight));
-        }
-        init(points, colors, new Rectangle(0, 0, maxWidth, maxHeight));
+
+        init(points, new Rectangle(0, 0, maxWidth, maxHeight));
+
         fortunesAlgorithm();
     }
 
-    private void init(ArrayList<Point> points, ArrayList<Color> colors, Rectangle plotBounds) {
-        _sites = new SiteList();
-        _sitesIndexedByLocation = new HashMap();
-        addSites(points, colors);
-        _plotBounds = plotBounds;
-        _triangles = new ArrayList();
-        _edges = new ArrayList();
+    private void init(List<Point> points, Rectangle plotBounds) {
+        sites = new SiteList();
+        center2siteMap = new HashMap<>();
+        addSites(points);
+        this.plotBounds = plotBounds;
+        _triangles = new ArrayList<>();
+        edges = new ArrayList<>();
     }
 
-    private void addSites(ArrayList<Point> points, ArrayList<Color> colors) {
-        int length = points.size();
-        for (int i = 0; i < length; ++i) {
-            addSite(points.get(i), colors != null ? colors.get(i) : null, i);
+    private void addSites(List<Point> points) {
+        for (int idx = 0; idx < points.size(); ++idx) {
+            Point point = points.get(idx);
+            double weight = Math.random() * 100;
+
+            Site site = new Site(point, idx, weight);
+
+            sites.add(site);
+            center2siteMap.put(point, site);
         }
     }
 
-    private void addSite(Point p, Color color, int index) {
-        double weight = Math.random() * 100;
-        Site site = Site.create(p, index, weight, color);
-        _sites.push(site);
-        _sitesIndexedByLocation.put(p, site);
+    /**
+     * @return Graph edges.
+     */
+    public List<Edge> edges() {
+        return edges;
     }
 
-    public ArrayList<Edge> edges() {
-        return _edges;
+    /**
+     * @param p Site center.
+     * @return Site border represented as continuous line of edge corners clipped in graph bounds.
+     * Empty array if site with center in given point doesn't exist.
+     */
+    public List<Point> region(Point p) {
+        Site site = center2siteMap.get(p);
+
+        if (site == null)
+            return new ArrayList<>();
+
+        return site.region(plotBounds);
     }
 
-    public ArrayList<Point> region(Point p) {
-        Site site = _sitesIndexedByLocation.get(p);
-        if (site == null) {
-            return new ArrayList();
-        }
-        return site.region(_plotBounds);
-    }
+    // TODO: bug (from AS, no entries found): if you call this before you call region(), something goes wrong :(
+    public List<Point> neighborSitesForSite(Point coord) {
+        List<Point> points = new ArrayList<>();
+        Site site = center2siteMap.get(coord);
 
-    // TODO: bug: if you call this before you call region(), something goes wrong :(
-    public ArrayList<Point> neighborSitesForSite(Point coord) {
-        ArrayList<Point> points = new ArrayList();
-        Site site = _sitesIndexedByLocation.get(coord);
-        if (site == null) {
+        if (site == null)
             return points;
-        }
-        ArrayList<Site> sites = site.neighborSites();
-        for (Site neighbor : sites) {
-            points.add(neighbor.get_coord());
-        }
+
+        List<Site> sites = site.neighborSites();
+
+        for (Site neighbor : sites)
+            points.add(neighbor.getPosition());
+
         return points;
     }
 
-    public ArrayList<Circle> circles() {
-        return _sites.circles();
+    public List<Circle> circles() {
+        return sites.circles();
     }
 
-    private ArrayList<Edge> selectEdgesForSitePoint(Point coord, ArrayList<Edge> edgesToTest) {
-        ArrayList<Edge> filtered = new ArrayList();
+    private List<Edge> selectEdgesForSitePoint(Point coord, List<Edge> edgesToTest) {
+        List<Edge> filtered = new ArrayList<>();
 
         for (Edge e : edgesToTest) {
-            if (((e.get_leftSite() != null && e.get_leftSite().get_coord() == coord)
-                    || (e.get_rightSite() != null && e.get_rightSite().get_coord() == coord))) {
+            //TODO extract condition
+            if (((e.getLeftSite() != null && e.getLeftSite().getPosition() == coord)
+                    || (e.getRightSite() != null && e.getRightSite().getPosition() == coord))) {
                 filtered.add(e);
             }
         }
+
         return filtered;
 
         /*function myTest(edge:Edge, index:int, vector:Vector.<Edge>):Boolean
@@ -195,13 +198,13 @@ public final class Voronoi {
          }*/
     }
 
-    private ArrayList<LineSegment> visibleLineSegments(ArrayList<Edge> edges) {
-        ArrayList<LineSegment> segments = new ArrayList();
+    private List<LineSegment> visibleLineSegments(List<Edge> edges) {
+        List<LineSegment> segments = new ArrayList<>();
 
         for (Edge edge : edges) {
-            if (edge.get_visible()) {
-                Point p1 = edge.get_clippedEnds().get(LR.LEFT);
-                Point p2 = edge.get_clippedEnds().get(LR.RIGHT);
+            if (edge.isVisible()) {
+                Point p1 = edge.getClippedEnds().get(LR.LEFT);
+                Point p2 = edge.getClippedEnds().get(LR.RIGHT);
                 segments.add(new LineSegment(p1, p2));
             }
         }
@@ -209,46 +212,42 @@ public final class Voronoi {
         return segments;
     }
 
-    private ArrayList<LineSegment> delaunayLinesForEdges(ArrayList<Edge> edges) {
-        ArrayList<LineSegment> segments = new ArrayList();
+    private List<LineSegment> delaunayLinesForEdges(List<Edge> edges) {
+        List<LineSegment> segments = new ArrayList<>();
 
-        for (Edge edge : edges) {
+        for (Edge edge : edges)
             segments.add(edge.delaunayLine());
-        }
 
         return segments;
     }
 
-    public ArrayList<LineSegment> voronoiBoundaryForSite(Point coord) {
-        return visibleLineSegments(selectEdgesForSitePoint(coord, _edges));
+    public List<LineSegment> voronoiBoundaryForSite(Point coord) {
+        return visibleLineSegments(selectEdgesForSitePoint(coord, edges));
     }
 
-    public ArrayList<LineSegment> delaunayLinesForSite(Point coord) {
-        return delaunayLinesForEdges(selectEdgesForSitePoint(coord, _edges));
+    public List<LineSegment> delaunayLinesForSite(Point coord) {
+        return delaunayLinesForEdges(selectEdgesForSitePoint(coord, edges));
     }
 
-    public ArrayList<LineSegment> voronoiDiagram() {
-        return visibleLineSegments(_edges);
+    public List<LineSegment> voronoiDiagram() {
+        return visibleLineSegments(edges);
     }
 
     /*public ArrayList<LineSegment> delaunayTriangulation(keepOutMask:BitmapData = null)
      {
-     return delaunayLinesForEdges(selectNonIntersectingEdges(keepOutMask, _edges));
+     return delaunayLinesForEdges(selectNonIntersectingEdges(keepOutMask, edges));
      }*/
-    public ArrayList<LineSegment> hull() {
+    public List<LineSegment> hull() {
         return delaunayLinesForEdges(hullEdges());
     }
 
-    private ArrayList<Edge> hullEdges() {
-        ArrayList<Edge> filtered = new ArrayList();
+    private List<Edge> hullEdges() {
+        List<Edge> filtered = new ArrayList<>();
 
-        for (Edge e : _edges) {
-            if (e.isPartOfConvexHull()) {
+        for (Edge e : edges) {
+            if (e.isPartOfConvexHull())
                 filtered.add(e);
-            }
         }
-
-
 
         return filtered;
 
@@ -258,45 +257,53 @@ public final class Voronoi {
          }*/
     }
 
-    public ArrayList<Point> hullPointsInOrder() {
-        ArrayList<Edge> hullEdges = hullEdges();
+    public List<Point> hullPointsInOrder() {
+        List<Edge> hullEdges = hullEdges();
 
-        ArrayList<Point> points = new ArrayList();
-        if (hullEdges.isEmpty()) {
+        List<Point> points = new ArrayList<>();
+
+        if (hullEdges.isEmpty())
             return points;
-        }
 
         EdgeReorderer reorderer = new EdgeReorderer(hullEdges, Site.class);
-        hullEdges = reorderer.get_edges();
-        ArrayList<LR> orientations = reorderer.get_edgeOrientations();
-        reorderer.dispose();
+
+        hullEdges = reorderer.getEdges();
+
+        List<LR> orientations = reorderer.getEdgeOrientations();
 
         LR orientation;
 
         int n = hullEdges.size();
+
         for (int i = 0; i < n; ++i) {
             Edge edge = hullEdges.get(i);
             orientation = orientations.get(i);
-            points.add(edge.site(orientation).get_coord());
+            points.add(edge.site(orientation).getPosition());
         }
+
         return points;
     }
 
     /*public ArrayList<LineSegment> spanningTree(String type, keepOutMask:BitmapData = null)
      {
-     ArrayList<Edge>  edges = selectNonIntersectingEdges(keepOutMask, _edges);
+     ArrayList<Edge>  edges = selectNonIntersectingEdges(keepOutMask, edges);
      ArrayList<LineSegment>  segments = delaunayLinesForEdges(edges);
      return kruskal(segments, type);
      }*/
-    public ArrayList<ArrayList<Point>> regions() {
-        return _sites.regions(_plotBounds);
+
+    /**
+     * @return Borders for every site.
+     * Each border represented as continuous line of edge corners clipped in graph bounds.
+     */
+    public List<List<Point>> regions() {
+        return sites.regions(plotBounds);
     }
 
     /*public ArrayList<Integer> siteColors(referenceImage:BitmapData = null)
      {
-     return _sites.siteColors(referenceImage);
+     return sites.siteColors(referenceImage);
      }*/
-    /**
+    /*
      *
      * @param proximityMap a BitmapData whose regions are filled with the site
      * index values; see PlanePointsCanvas::fillRegions()
@@ -307,43 +314,44 @@ public final class Voronoi {
      */
     /*public Point nearestSitePoint(proximityMap:BitmapData,double x, double y)
      {
-     return _sites.nearestSitePoint(proximityMap, x, y);
+     return sites.nearestSitePoint(proximityMap, x, y);
      }*/
-    public ArrayList<Point> siteCoords() {
-        return _sites.siteCoords();
+    public List<Point> siteCoords() {
+        return sites.siteCoords();
     }
 
     private void fortunesAlgorithm() {
         Site newSite, bottomSite, topSite, tempSite;
         Vertex v, vertex;
-        Point newintstar = null;
+        Point newIntStar = null;
         LR leftRight;
         Halfedge lbnd, rbnd, llbnd, rrbnd, bisector;
         Edge edge;
 
-        Rectangle dataBounds = _sites.getSitesBounds();
+        sites.sort();
 
-        int sqrt_nsites = (int) Math.sqrt(_sites.get_length() + 4);
+        Rectangle dataBounds = sites.getSitesBounds();
+
+        int sqrt_nsites = (int) Math.sqrt(sites.size() + 4);
         HalfedgePriorityQueue heap = new HalfedgePriorityQueue(dataBounds.y, dataBounds.height, sqrt_nsites);
-        EdgeList edgeList = new EdgeList(dataBounds.x, dataBounds.width, sqrt_nsites);
-        ArrayList<Halfedge> halfEdges = new ArrayList();
-        ArrayList<Vertex> vertices = new ArrayList();
+        HalfedgeList halfedgeList = new HalfedgeList(dataBounds.x, dataBounds.width, sqrt_nsites);
 
-        Site bottomMostSite = _sites.next();
-        newSite = _sites.next();
+        Site bottomMostSite = sites.next();
+        newSite = sites.next();
+
+        int totalVertices = 0;
+        int totalEdges = 0;
 
         for (;;) {
-            if (heap.empty() == false) {
-                newintstar = heap.min();
-            }
+            if (!heap.empty())
+                newIntStar = heap.min();
 
-            if (newSite != null
-                    && (heap.empty() || compareByYThenX(newSite, newintstar) < 0)) {
+            if (newSite != null && (heap.empty() || GenUtils.compareByYThenX(newSite, newIntStar) < 0)) {
                 /* new site is smallest */
                 //trace("smallest: new site " + newSite);
 
                 // Step 8:
-                lbnd = edgeList.edgeListLeftNeighbor(newSite.get_coord());	// the Halfedge just to the left of newSite
+                lbnd = halfedgeList.edgeListLeftNeighbor(newSite.getPosition());	// the Halfedge just to the left of newSite
                 //trace("lbnd: " + lbnd);
                 rbnd = lbnd.edgeListRightNeighbor;		// the Halfedge just to the right
                 //trace("rbnd: " + rbnd);
@@ -352,42 +360,38 @@ public final class Voronoi {
                 //trace("new Site is in region of existing site: " + bottomSite);
 
                 // Step 9:
-                edge = Edge.createBisectingEdge(bottomSite, newSite);
+                edge = Edge.createBisectingEdge(bottomSite, newSite, totalEdges++);
                 //trace("new edge: " + edge);
-                _edges.add(edge);
+                edges.add(edge);
 
-                bisector = Halfedge.create(edge, LR.LEFT);
-                halfEdges.add(bisector);
+                bisector = new Halfedge(edge, LR.LEFT);
                 // inserting two Halfedges into edgeList constitutes Step 10:
                 // insert bisector to the right of lbnd:
-                edgeList.insert(lbnd, bisector);
+                halfedgeList.insert(lbnd, bisector);
 
                 // first half of Step 11:
                 if ((vertex = Vertex.intersect(lbnd, bisector)) != null) {
-                    vertices.add(vertex);
                     heap.remove(lbnd);
                     lbnd.vertex = vertex;
-                    lbnd.ystar = vertex.get_y() + newSite.dist(vertex);
+                    lbnd.ystar = vertex.getY() + newSite.dist(vertex);
                     heap.insert(lbnd);
                 }
 
                 lbnd = bisector;
-                bisector = Halfedge.create(edge, LR.RIGHT);
-                halfEdges.add(bisector);
+                bisector = new Halfedge(edge, LR.RIGHT);
                 // second Halfedge for Step 10:
                 // insert bisector to the right of lbnd:
-                edgeList.insert(lbnd, bisector);
+                halfedgeList.insert(lbnd, bisector);
 
                 // second half of Step 11:
                 if ((vertex = Vertex.intersect(bisector, rbnd)) != null) {
-                    vertices.add(vertex);
                     bisector.vertex = vertex;
-                    bisector.ystar = vertex.get_y() + newSite.dist(vertex);
+                    bisector.ystar = vertex.getY() + newSite.dist(vertex);
                     heap.insert(bisector);
                 }
 
-                newSite = _sites.next();
-            } else if (heap.empty() == false) {
+                newSite = sites.next();
+            } else if (!heap.empty()) {
                 /* intersection is smallest */
                 lbnd = heap.extractMin();
                 llbnd = lbnd.edgeListLeftNeighbor;
@@ -397,39 +401,36 @@ public final class Voronoi {
                 topSite = rightRegion(rbnd, bottomMostSite);
                 // these three sites define a Delaunay triangle
                 // (not actually using these for anything...)
-                //_triangles.push(new Triangle(bottomSite, topSite, rightRegion(lbnd)));
+                //_triangles.add(new Triangle(bottomSite, topSite, rightRegion(lbnd)));
 
                 v = lbnd.vertex;
-                v.setIndex();
+                v.setIndex(totalVertices++);
                 lbnd.edge.setVertex(lbnd.leftRight, v);
                 rbnd.edge.setVertex(rbnd.leftRight, v);
-                edgeList.remove(lbnd);
+                halfedgeList.remove(lbnd);
                 heap.remove(rbnd);
-                edgeList.remove(rbnd);
+                halfedgeList.remove(rbnd);
                 leftRight = LR.LEFT;
-                if (bottomSite.get_y() > topSite.get_y()) {
+                if (bottomSite.getY() > topSite.getY()) {
                     tempSite = bottomSite;
                     bottomSite = topSite;
                     topSite = tempSite;
                     leftRight = LR.RIGHT;
                 }
-                edge = Edge.createBisectingEdge(bottomSite, topSite);
-                _edges.add(edge);
-                bisector = Halfedge.create(edge, leftRight);
-                halfEdges.add(bisector);
-                edgeList.insert(llbnd, bisector);
+                edge = Edge.createBisectingEdge(bottomSite, topSite, totalEdges++);
+                edges.add(edge);
+                bisector = new Halfedge(edge, leftRight);
+                halfedgeList.insert(llbnd, bisector);
                 edge.setVertex(LR.other(leftRight), v);
                 if ((vertex = Vertex.intersect(llbnd, bisector)) != null) {
-                    vertices.add(vertex);
                     heap.remove(llbnd);
                     llbnd.vertex = vertex;
-                    llbnd.ystar = vertex.get_y() + bottomSite.dist(vertex);
+                    llbnd.ystar = vertex.getY() + bottomSite.dist(vertex);
                     heap.insert(llbnd);
                 }
                 if ((vertex = Vertex.intersect(bisector, rrbnd)) != null) {
-                    vertices.add(vertex);
                     bisector.vertex = vertex;
-                    bisector.ystar = vertex.get_y() + bottomSite.dist(vertex);
+                    bisector.ystar = vertex.getY() + bottomSite.dist(vertex);
                     heap.insert(bisector);
                 }
             } else {
@@ -439,71 +440,27 @@ public final class Voronoi {
 
         // heap should be empty now
         heap.dispose();
-        edgeList.dispose();
-
-        for (Halfedge halfEdge : halfEdges) {
-            halfEdge.reallyDispose();
-        }
-        halfEdges.clear();
 
         // we need the vertices to clip the edges
-        for (Edge e : _edges) {
-            e.clipVertices(_plotBounds);
-        }
-        // but we don't actually ever use them again!
-        for (Vertex v0 : vertices) {
-            v0.dispose();
-        }
-        vertices.clear();
-
-
+        for (Edge e : edges)
+            e.clipVertices(plotBounds);
     }
 
     Site leftRegion(Halfedge he, Site bottomMostSite) {
         Edge edge = he.edge;
-        if (edge == null) {
+
+        if (edge == null)
             return bottomMostSite;
-        }
+
         return edge.site(he.leftRight);
     }
 
     Site rightRegion(Halfedge he, Site bottomMostSite) {
         Edge edge = he.edge;
-        if (edge == null) {
+
+        if (edge == null)
             return bottomMostSite;
-        }
+
         return edge.site(LR.other(he.leftRight));
-    }
-
-    public static int compareByYThenX(Site s1, Site s2) {
-        if (s1.get_y() < s2.get_y()) {
-            return -1;
-        }
-        if (s1.get_y() > s2.get_y()) {
-            return 1;
-        }
-        if (s1.get_x() < s2.get_x()) {
-            return -1;
-        }
-        if (s1.get_x() > s2.get_x()) {
-            return 1;
-        }
-        return 0;
-    }
-
-    public static int compareByYThenX(Site s1, Point s2) {
-        if (s1.get_y() < s2.y) {
-            return -1;
-        }
-        if (s1.get_y() > s2.y) {
-            return 1;
-        }
-        if (s1.get_x() < s2.x) {
-            return -1;
-        }
-        if (s1.get_x() > s2.x) {
-            return 1;
-        }
-        return 0;
     }
 }

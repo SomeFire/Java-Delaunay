@@ -1,245 +1,244 @@
 package com.hoten.delaunay.voronoi.nodename.as3delaunay;
 
+import com.hoten.delaunay.geom.GenUtils;
 import com.hoten.delaunay.geom.Point;
 import com.hoten.delaunay.geom.Rectangle;
-import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.Stack;
+import java.util.List;
 
 public final class Site implements ICoord {
 
-    private static Stack<Site> _pool = new Stack();
+    /** Inaccuracy of measurements. */
+    private static final double EPSILON = .005;
 
-    public static Site create(Point p, int index, double weight, Color color) {
-        if (_pool.size() > 0) {
-            return _pool.pop().init(p, index, weight, color);
-        } else {
-            return new Site(p, index, weight, color);
-        }
-    }
+    /** Site location. **/
+    private final Point position;
 
-    public static void sortSites(ArrayList<Site> sites) {
-        //sites.sort(Site.compare);
-        Collections.sort(sites, new Comparator<Site>() {
-            @Override
-            public int compare(Site o1, Site o2) {
-                return (int) Site.compare(o1, o2);
-            }
-        });
-    }
+    /** Currently have no use and created by "Math.random". Possible way for height algorithms. **/
+    private double weight;
+
+    /** Site index. */
+    private int index;
+
+    /** The edges that define this Site's Voronoi region. */
+    private List<Edge> edges;
+
+    /** Which end of each edge hooks up with the previous edge in edges. */
+    private List<LR> edgeOrientations;
+
+    /** Ordered list of points that define site border clipped to bounds. */
+    private List<Point> region;
 
     /**
-     * sort sites on y, then x, coord also change each site's _siteIndex to
-     * match its new position in the list so the _siteIndex can be used to
-     * identify the site for nearest-neighbor queries
+     * Sort sites on y, then x coord, also change each site's index to
+     * match its new position in the list so the index can be used to
+     * identify the site for nearest-neighbor queries.
      *
      * haha "also" - means more than one responsibility...
      *
      */
-    private static double compare(Site s1, Site s2) {
-        int returnValue = Voronoi.compareByYThenX(s1, s2);
+    static void sortSites(List<Site> sites) {
+        sites.sort((s1, s2) -> {
+            int returnValue = GenUtils.compareByYThenX(s1, s2);
 
-        // swap _siteIndex values if necessary to match new ordering:
-        int tempIndex;
-        if (returnValue == -1) {
-            if (s1._siteIndex > s2._siteIndex) {
-                tempIndex = s1._siteIndex;
-                s1._siteIndex = s2._siteIndex;
-                s2._siteIndex = tempIndex;
+            // swap index values if necessary to match new ordering:
+            int tempIndex;
+
+            if (returnValue == -1) {
+                if (s1.index > s2.index) {
+                    tempIndex = s1.index;
+                    s1.index = s2.index;
+                    s2.index = tempIndex;
+                }
             }
-        } else if (returnValue == 1) {
-            if (s2._siteIndex > s1._siteIndex) {
-                tempIndex = s2._siteIndex;
-                s2._siteIndex = s1._siteIndex;
-                s1._siteIndex = tempIndex;
+            else if (returnValue == 1) {
+                if (s2.index > s1.index) {
+                    tempIndex = s2.index;
+                    s2.index = s1.index;
+                    s1.index = tempIndex;
+                }
+
             }
 
-        }
-
-        return returnValue;
-    }
-    final private static double EPSILON = .005;
-
-    private static boolean closeEnough(Point p0, Point p1) {
-        return Point.distance(p0, p1) < EPSILON;
-    }
-    private Point _coord;
-
-    @Override
-    public Point get_coord() {
-        return _coord;
-    }
-    public Color color;
-    public double weight;
-    private int _siteIndex;
-    // the edges that define this Site's Voronoi region:
-    public ArrayList<Edge> _edges;
-    // which end of each edge hooks up with the previous edge in _edges:
-    private ArrayList<LR> _edgeOrientations;
-    // ordered list of points that define the region clipped to bounds:
-    private ArrayList<Point> _region;
-
-    public Site(Point p, int index, double weight, Color color) {
-        init(p, index, weight, color);
-    }
-
-    private Site init(Point p, int index, double weight, Color color) {
-        _coord = p;
-        _siteIndex = index;
-        this.weight = weight;
-        this.color = color;
-        _edges = new ArrayList();
-        _region = null;
-        return this;
-    }
-
-    @Override
-    public String toString() {
-        return "Site " + _siteIndex + ": " + get_coord();
-    }
-
-    private void move(Point p) {
-        clear();
-        _coord = p;
-    }
-
-    public void dispose() {
-        _coord = null;
-        clear();
-        _pool.push(this);
-    }
-
-    private void clear() {
-        if (_edges != null) {
-            _edges.clear();
-            _edges = null;
-        }
-        if (_edgeOrientations != null) {
-            _edgeOrientations.clear();
-            _edgeOrientations = null;
-        }
-        if (_region != null) {
-            _region.clear();
-            _region = null;
-        }
-    }
-
-    void addEdge(Edge edge) {
-        _edges.add(edge);
-    }
-
-    public Edge nearestEdge() {
-        // _edges.sort(Edge.compareSitesDistances);
-        Collections.sort(_edges, new Comparator<Edge>() {
-            @Override
-            public int compare(Edge o1, Edge o2) {
-                return (int) Edge.compareSitesDistances(o1, o2);
-            }
+            return returnValue;
         });
-        return _edges.get(0);
     }
 
-    ArrayList<Site> neighborSites() {
-        if (_edges == null || _edges.isEmpty()) {
-            return new ArrayList();
-        }
-        if (_edgeOrientations == null) {
+    /** {@inheritDoc} */
+    @Override public Point getPosition() {
+        return position;
+    }
+
+    /**
+     * @param p Point.
+     * @param index Site index.
+     * @param weight Site weight.
+     */
+    Site(Point p, int index, double weight) {
+        position = p;
+        this.index = index;
+        this.weight = weight;
+        edges = new ArrayList<>();
+        region = null;
+    }
+
+    /** {@inheritDoc} */
+    @Override public String toString() {
+        return "Site " + index + ": " + getPosition();
+    }
+
+    /**
+     * @param edge Additional border segment.
+     */
+    void addEdge(Edge edge) {
+        edges.add(edge);
+    }
+
+    /**
+     * @return Nearest border edge.
+     */
+    public Edge nearestEdge() {
+        edges.sort(GenUtils::compareSitesDistances);
+
+        return edges.get(0);
+    }
+
+    /**
+     * @return Neighbors.
+     */
+    List<Site> neighborSites() {
+        if (edges == null || edges.isEmpty())
+            return new ArrayList<>();
+
+        if (edgeOrientations == null)
             reorderEdges();
-        }
-        ArrayList<Site> list = new ArrayList();
-        for (Edge edge : _edges) {
+
+        ArrayList<Site> list = new ArrayList<>();
+
+        for (Edge edge : edges)
             list.add(neighborSite(edge));
-        }
+
         return list;
     }
 
+    /**
+     * @param edge Border edge.
+     * @return Neighbor site by given edge. Return {@code null} if no neighbor exist or edge isn't border for this site.
+     */
     private Site neighborSite(Edge edge) {
-        if (this == edge.get_leftSite()) {
-            return edge.get_rightSite();
-        }
-        if (this == edge.get_rightSite()) {
-            return edge.get_leftSite();
-        }
+        if (this == edge.getLeftSite())
+            return edge.getRightSite();
+
+        if (this == edge.getRightSite())
+            return edge.getLeftSite();
+
         return null;
     }
 
-    ArrayList<Point> region(Rectangle clippingBounds) {
-        if (_edges == null || _edges.isEmpty()) {
-            return new ArrayList();
-        }
-        if (_edgeOrientations == null) {
+    /**
+     * @param clippingBounds Graph bounds.
+     * @return Continuous line represented as a sequence of points clipped in graph bounds.
+     */
+    List<Point> region(Rectangle clippingBounds) {
+        if (edges == null || edges.isEmpty())
+            return new ArrayList<>();
+
+        if (edgeOrientations == null || edgeOrientations.isEmpty()) {
             reorderEdges();
-            _region = clipToBounds(clippingBounds);
-            if ((new Polygon(_region)).winding() == Winding.CLOCKWISE) {
-                Collections.reverse(_region);
-            }
+
+            region = clipToBounds(clippingBounds);
+
+            if ((new Polygon(region)).winding() == Winding.CLOCKWISE)
+                Collections.reverse(region);
         }
-        return _region;
+
+        return region;
     }
 
+    /**
+     * Sort border edges. After sorting they will represent continuous closed line.
+     */
     private void reorderEdges() {
-        //trace("_edges:", _edges);
-        EdgeReorderer reorderer = new EdgeReorderer(_edges, Vertex.class);
-        _edges = reorderer.get_edges();
-        //trace("reordered:", _edges);
-        _edgeOrientations = reorderer.get_edgeOrientations();
-        reorderer.dispose();
+        EdgeReorderer reorderer = new EdgeReorderer(edges, Vertex.class);
+
+        edges = reorderer.getEdges();
+        edgeOrientations = reorderer.getEdgeOrientations();
     }
 
+    /**
+     * Converts site edge border to sequence points (edge ends positions), clipped to given boundaries.
+     *
+     * @param bounds Graph bounds.
+     * @return Clipped site border represented as a sequence of points.
+     */
     private ArrayList<Point> clipToBounds(Rectangle bounds) {
-        ArrayList<Point> points = new ArrayList();
-        int n = _edges.size();
-        int i = 0;
-        Edge edge;
-        while (i < n && (_edges.get(i).get_visible() == false)) {
-            ++i;
-        }
+        int visibleEdgeIdx = 0;
 
-        if (i == n) {
+        while (visibleEdgeIdx < edges.size() && (!edges.get(visibleEdgeIdx).isVisible()))
+            ++visibleEdgeIdx;
+
+        if (visibleEdgeIdx == edges.size()) {
             // no edges visible
-            return new ArrayList();
+            return new ArrayList<>();
         }
-        edge = _edges.get(i);
-        LR orientation = _edgeOrientations.get(i);
-        points.add(edge.get_clippedEnds().get(orientation));
-        points.add(edge.get_clippedEnds().get((LR.other(orientation))));
 
-        for (int j = i + 1; j < n; ++j) {
-            edge = _edges.get(j);
-            if (edge.get_visible() == false) {
+        Edge edge = edges.get(visibleEdgeIdx);
+        LR orientation = edgeOrientations.get(visibleEdgeIdx);
+
+        ArrayList<Point> points = new ArrayList<>();
+
+        points.add(edge.getClippedEnds().get(orientation));
+        points.add(edge.getClippedEnds().get((LR.other(orientation))));
+
+        for (int j = visibleEdgeIdx + 1; j < edges.size(); ++j) {
+            edge = edges.get(j);
+
+            if (!edge.isVisible())
                 continue;
-            }
+
             connect(points, j, bounds, false);
         }
-        // close up the polygon by adding another corner point of the bounds if needed:
-        connect(points, i, bounds, true);
+
+        // Close up the polygon by adding another corner point of the bounds if needed.
+        connect(points, visibleEdgeIdx, bounds, true);
 
         return points;
     }
 
+    /**
+     * Insert ends of "j" edge into sequence of points representing clipped site border.
+     *
+     * @param points List containing unfinished sequence.
+     * @param j Start index.
+     * @param bounds Graph bounds.
+     * @param closingUp {@code True} if we should finish connecting.
+     */
     private void connect(ArrayList<Point> points, int j, Rectangle bounds, boolean closingUp) {
-        Point rightPoint = points.get(points.size() - 1);
-        Edge newEdge = _edges.get(j);
-        LR newOrientation = _edgeOrientations.get(j);
+        Point lastPoint = points.get(points.size() - 1);
+        Edge newEdge = edges.get(j);
+        LR newOrientation = edgeOrientations.get(j);
         // the point that  must be connected to rightPoint:
-        Point newPoint = newEdge.get_clippedEnds().get(newOrientation);
-        if (!closeEnough(rightPoint, newPoint)) {
+        Point newPoint = newEdge.getClippedEnds().get(newOrientation);
+
+        if (!GenUtils.closeEnough(lastPoint, newPoint, EPSILON)) {
             // The points do not coincide, so they must have been clipped at the bounds;
             // see if they are on the same border of the bounds:
-            if (rightPoint.x != newPoint.x
-                    && rightPoint.y != newPoint.y) {
+            if (lastPoint.x != newPoint.x
+                    && lastPoint.y != newPoint.y) {
                 // They are on different borders of the bounds;
                 // insert one or two corners of bounds as needed to hook them up:
                 // (NOTE this will not be correct if the region should take up more than
                 // half of the bounds rect, for then we will have gone the wrong way
                 // around the bounds and included the smaller part rather than the larger)
-                int rightCheck = BoundsCheck.check(rightPoint, bounds);
+                int rightCheck = BoundsCheck.check(lastPoint, bounds);
                 int newCheck = BoundsCheck.check(newPoint, bounds);
+
                 double px, py;
+
                 if ((rightCheck & BoundsCheck.RIGHT) != 0) {
                     px = bounds.right;
+
                     if ((newCheck & BoundsCheck.BOTTOM) != 0) {
                         py = bounds.bottom;
                         points.add(new Point(px, py));
@@ -247,11 +246,11 @@ public final class Site implements ICoord {
                         py = bounds.top;
                         points.add(new Point(px, py));
                     } else if ((newCheck & BoundsCheck.LEFT) != 0) {
-                        if (rightPoint.y - bounds.y + newPoint.y - bounds.y < bounds.height) {
+                        if (lastPoint.y - bounds.y + newPoint.y - bounds.y < bounds.height)
                             py = bounds.top;
-                        } else {
+                        else
                             py = bounds.bottom;
-                        }
+
                         points.add(new Point(px, py));
                         points.add(new Point(bounds.left, py));
                     }
@@ -264,7 +263,7 @@ public final class Site implements ICoord {
                         py = bounds.top;
                         points.add(new Point(px, py));
                     } else if ((newCheck & BoundsCheck.RIGHT) != 0) {
-                        if (rightPoint.y - bounds.y + newPoint.y - bounds.y < bounds.height) {
+                        if (lastPoint.y - bounds.y + newPoint.y - bounds.y < bounds.height) {
                             py = bounds.top;
                         } else {
                             py = bounds.bottom;
@@ -281,7 +280,7 @@ public final class Site implements ICoord {
                         px = bounds.left;
                         points.add(new Point(px, py));
                     } else if ((newCheck & BoundsCheck.BOTTOM) != 0) {
-                        if (rightPoint.x - bounds.x + newPoint.x - bounds.x < bounds.width) {
+                        if (lastPoint.x - bounds.x + newPoint.x - bounds.x < bounds.width) {
                             px = bounds.left;
                         } else {
                             px = bounds.right;
@@ -298,7 +297,7 @@ public final class Site implements ICoord {
                         px = bounds.left;
                         points.add(new Point(px, py));
                     } else if ((newCheck & BoundsCheck.TOP) != 0) {
-                        if (rightPoint.x - bounds.x + newPoint.x - bounds.x < bounds.width) {
+                        if (lastPoint.x - bounds.x + newPoint.x - bounds.x < bounds.width) {
                             px = bounds.left;
                         } else {
                             px = bounds.right;
@@ -308,28 +307,41 @@ public final class Site implements ICoord {
                     }
                 }
             }
+
             if (closingUp) {
                 // newEdge's ends have already been added
                 return;
             }
+
             points.add(newPoint);
         }
-        Point newRightPoint = newEdge.get_clippedEnds().get(LR.other(newOrientation));
-        if (!closeEnough(points.get(0), newRightPoint)) {
+
+        Point newRightPoint = newEdge.getClippedEnds().get(LR.other(newOrientation));
+
+        if (!GenUtils.closeEnough(points.get(0), newRightPoint, EPSILON))
             points.add(newRightPoint);
-        }
     }
 
-    public double get_x() {
-        return _coord.x;
+    /**
+     * @return X coordinate.
+     */
+    public double getX() {
+        return position.x;
     }
 
-    public double get_y() {
-        return _coord.y;
+    /**
+     * @return Y coordinate.
+     */
+    public double getY() {
+        return position.y;
     }
 
+    /**
+     * @param p Target.
+     * @return Distance between site position and given object.
+     */
     public double dist(ICoord p) {
-        return Point.distance(p.get_coord(), this._coord);
+        return GenUtils.distance(p.getPosition(), this.position);
     }
 }
 
@@ -341,27 +353,24 @@ final class BoundsCheck {
     final public static int RIGHT = 8;
 
     /**
-     *
      * @param point
      * @param bounds
      * @return an int with the appropriate bits set if the Point lies on the
      * corresponding bounds lines
-     *
      */
     public static int check(Point point, Rectangle bounds) {
         int value = 0;
-        if (point.x == bounds.left) {
+
+        if (point.x == bounds.left)
             value |= LEFT;
-        }
-        if (point.x == bounds.right) {
+        else if (point.x == bounds.right)
             value |= RIGHT;
-        }
-        if (point.y == bounds.top) {
+
+        if (point.y == bounds.top)
             value |= TOP;
-        }
-        if (point.y == bounds.bottom) {
+        else if (point.y == bounds.bottom)
             value |= BOTTOM;
-        }
+
         return value;
     }
 

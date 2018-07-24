@@ -2,13 +2,14 @@ package com.hoten.delaunay.voronoi.nodename.as3delaunay;
 
 import com.hoten.delaunay.geom.Point;
 import java.util.ArrayList;
+import java.util.List;
 
-public final class EdgeList implements IDisposable {
+public final class HalfedgeList implements IDisposable {
 
-    private double _deltax;
-    private double _xmin;
+    private final double _deltax;
+    private final double _xmin;
     private int _hashsize;
-    private ArrayList<Halfedge> _hash;
+    private final List<Halfedge> _hash;
     public Halfedge leftEnd;
     public Halfedge rightEnd;
 
@@ -26,15 +27,14 @@ public final class EdgeList implements IDisposable {
         rightEnd = null;
 
         _hash.clear();
-        _hash = null;
     }
 
-    public EdgeList(double xmin, double deltax, int sqrt_nsites) {
+    public HalfedgeList(double xmin, double deltax, int sqrt_nsites) {
         _xmin = xmin;
         _deltax = deltax;
         _hashsize = 2 * sqrt_nsites;
 
-        _hash = new ArrayList(_hashsize);
+        _hash = new ArrayList<>(_hashsize);
 
         // two dummy Halfedges:
         leftEnd = Halfedge.createDummy();
@@ -44,9 +44,8 @@ public final class EdgeList implements IDisposable {
         rightEnd.edgeListLeftNeighbor = leftEnd;
         rightEnd.edgeListRightNeighbor = null;
         
-        for(int i = 0; i < _hashsize; i++){
+        for(int i = 0; i < _hashsize; i++)
             _hash.add(null);
-        }
         
         _hash.set(0, leftEnd);
         _hash.set(_hashsize - 1, rightEnd);
@@ -85,7 +84,6 @@ public final class EdgeList implements IDisposable {
      *
      * @param p
      * @return
-     *
      */
     public Halfedge edgeListLeftNeighbor(Point p) {
         int i, bucket;
@@ -129,21 +127,24 @@ public final class EdgeList implements IDisposable {
         return halfEdge;
     }
 
-    /* Get entry from hash table, pruning any deleted nodes */
+    /**
+     * Get entry from hash table, pruning any deleted nodes
+     */
     private Halfedge getHash(int b) {
         Halfedge halfEdge;
 
-        if (b < 0 || b >= _hashsize) {
+        if (b < 0 || b >= _hashsize)
             return null;
-        }
+
         halfEdge = _hash.get(b);
+
         if (halfEdge != null && halfEdge.edge == Edge.DELETED) {
             /* Hash table points to deleted halfedge.  Patch as necessary. */
             _hash.set(b, null);
             // still can't dispose halfEdge yet!
             return null;
-        } else {
-            return halfEdge;
         }
+
+        return halfEdge;
     }
 }

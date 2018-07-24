@@ -5,7 +5,7 @@ import java.util.Stack;
 
 public final class Halfedge {
 
-    private static Stack<Halfedge> _pool = new Stack();
+    private static Stack<Halfedge> _pool = new Stack<>();
 
     public static Halfedge create(Edge edge, LR lr) {
         if (_pool.size() > 0) {
@@ -18,6 +18,7 @@ public final class Halfedge {
     public static Halfedge createDummy() {
         return create(null, null);
     }
+
     public Halfedge edgeListLeftNeighbor, edgeListRightNeighbor;
     public Halfedge nextInPriorityQueue;
     public Edge edge;
@@ -45,7 +46,7 @@ public final class Halfedge {
 
     public void dispose() {
         if (edgeListLeftNeighbor != null || edgeListRightNeighbor != null) {
-            // still in EdgeList
+            // still in HalfedgeList
             return;
         }
         if (nextInPriorityQueue != null) {
@@ -73,8 +74,8 @@ public final class Halfedge {
         boolean rightOfSite, above, fast;
         double dxp, dyp, dxs, t1, t2, t3, yl;
 
-        topSite = edge.get_rightSite();
-        rightOfSite = p.x > topSite.get_x();
+        topSite = edge.getRightSite();
+        rightOfSite = p.x > topSite.getX();
         if (rightOfSite && this.leftRight == LR.LEFT) {
             return true;
         }
@@ -83,8 +84,8 @@ public final class Halfedge {
         }
 
         if (edge.a == 1.0) {
-            dyp = p.y - topSite.get_y();
-            dxp = p.x - topSite.get_x();
+            dyp = p.y - topSite.getY();
+            dxp = p.x - topSite.getX();
             fast = false;
             if ((!rightOfSite && edge.b < 0.0) || (rightOfSite && edge.b >= 0.0)) {
                 above = dyp >= edge.b * dxp;
@@ -99,7 +100,7 @@ public final class Halfedge {
                 }
             }
             if (!fast) {
-                dxs = topSite.get_x() - edge.get_leftSite().get_x();
+                dxs = topSite.getX() - edge.getLeftSite().getX();
                 above = edge.b * (dxp * dxp - dyp * dyp)
                         < dxs * dyp * (1.0 + 2.0 * dxp / dxs + edge.b * edge.b);
                 if (edge.b < 0.0) {
@@ -109,10 +110,10 @@ public final class Halfedge {
         } else /* edge.b == 1.0 */ {
             yl = edge.c - edge.a * p.x;
             t1 = p.y - yl;
-            t2 = p.x - topSite.get_x();
-            t3 = yl - topSite.get_y();
+            t2 = p.x - topSite.getX();
+            t3 = yl - topSite.getY();
             above = t1 * t1 > t2 * t2 + t3 * t3;
         }
-        return this.leftRight == LR.LEFT ? above : !above;
+        return (this.leftRight == LR.LEFT) == above;
     }
 }

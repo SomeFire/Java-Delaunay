@@ -1,114 +1,113 @@
 package com.hoten.delaunay.voronoi.nodename.as3delaunay;
 
+import com.hoten.delaunay.geom.GenUtils;
 import com.hoten.delaunay.geom.Point;
-import java.util.Stack;
 
-final public class Vertex extends Object implements ICoord {
+final public class Vertex implements ICoord {
 
+    /** Vertex at affinity. Used in edge reordering to find out wrong edge list for reordering. */
     final public static Vertex VERTEX_AT_INFINITY = new Vertex(Double.NaN, Double.NaN);
-    final private static Stack<Vertex> _pool = new Stack();
 
-    private static Vertex create(double x, double y) {
+    /** Vertex index. */
+    private int index;
 
-        if (Double.isNaN(x) || Double.isNaN(y)) {
-            return VERTEX_AT_INFINITY;
-        }
-        if (_pool.size() > 0) {
+    /** Vertex position. */
+    private final Point position;
 
-            return _pool.pop().init(x, y);
-        } else {
-            return new Vertex(x, y);
-        }
-    }
-    private static int _nvertices = 0;
-    private Point _coord;
-
-    @Override
-    public Point get_coord() {
-        return _coord;
-    }
-    private int _vertexIndex;
-
-    public int get_vertexIndex() {
-        return _vertexIndex;
+    /**
+     * @param x Coordinate.
+     * @param y Coordinate.
+     */
+    private Vertex(double x, double y) {
+        position = new Point(x, y);
     }
 
-    public Vertex(double x, double y) {
-        init(x, y);
-    }
-
-    private Vertex init(double x, double y) {
-        _coord = new Point(x, y);
-        return this;
-    }
-
-    public void dispose() {
-        _coord = null;
-        _pool.push(this);
-    }
-
-    public void setIndex() {
-        _vertexIndex = _nvertices++;
-    }
-
-    @Override
-    public String toString() {
-        return "Vertex (" + _vertexIndex + ")";
+    /** {@inheritDoc} */
+    @Override public Point getPosition() {
+        return position;
     }
 
     /**
-     * This is the only way to make a Vertex
+     * @return index.
+     */
+    public int getIndex() {
+        return index;
+    }
+
+    /**
+     * @param idx New index.
+     */
+    public void setIndex(int idx) {
+        index = idx;
+    }
+
+    /** {@inheritDoc} */
+    @Override public String toString() {
+        return "Vertex (" + index + ") " + position.x + ", " + position.y;
+    }
+
+    /**
+     * This is the only way to make a Vertex.
      *
-     * @param halfedge0
-     * @param halfedge1
-     * @return
-     *
+     * @param halfedge0 Halfedge 0.
+     * @param halfedge1 Halfedge 1.
+     * @return Intersection vertex or {@code null} if there is no intersection between given halfedges.
      */
     public static Vertex intersect(Halfedge halfedge0, Halfedge halfedge1) {
-        Edge edge0, edge1, edge;
-        Halfedge halfedge;
-        double determinant, intersectionX, intersectionY;
-        boolean rightOfSite;
+        Edge edge0 = halfedge0.edge;
+        Edge edge1 = halfedge1.edge;
 
-        edge0 = halfedge0.edge;
-        edge1 = halfedge1.edge;
-        if (edge0 == null || edge1 == null) {
+        if (edge0 == null || edge1 == null)
             return null;
-        }
-        if (edge0.get_rightSite() == edge1.get_rightSite()) {
-            return null;
-        }
 
-        determinant = edge0.a * edge1.b - edge0.b * edge1.a;
+        if (edge0.getRightSite() == edge1.getRightSite())
+            return null;
+
+        double determinant = edge0.a * edge1.b - edge0.b * edge1.a;
+
         if (-1.0e-10 < determinant && determinant < 1.0e-10) {
             // the edges are parallel
             return null;
         }
 
-        intersectionX = (edge0.c * edge1.b - edge1.c * edge0.b) / determinant;
-        intersectionY = (edge1.c * edge0.a - edge0.c * edge1.a) / determinant;
+        double intersectionX = (edge0.c * edge1.b - edge1.c * edge0.b) / determinant;
+        double intersectionY = (edge1.c * edge0.a - edge0.c * edge1.a) / determinant;
 
-        if (Voronoi.compareByYThenX(edge0.get_rightSite(), edge1.get_rightSite()) < 0) {
+        if (Double.isNaN(intersectionX) || Double.isNaN(intersectionY))
+            return VERTEX_AT_INFINITY;
+
+        Edge edge;
+        Halfedge halfedge;
+
+        if (GenUtils.compareByYThenX(edge0.getRightSite(), edge1.getRightSite()) < 0) {
             halfedge = halfedge0;
             edge = edge0;
         } else {
             halfedge = halfedge1;
             edge = edge1;
         }
-        rightOfSite = intersectionX >= edge.get_rightSite().get_x();
+
+        boolean rightOfSite = intersectionX >= edge.getRightSite().getX();
+
         if ((rightOfSite && halfedge.leftRight == LR.LEFT)
                 || (!rightOfSite && halfedge.leftRight == LR.RIGHT)) {
             return null;
         }
 
-        return Vertex.create(intersectionX, intersectionY);
+        return new Vertex(intersectionX, intersectionY);
     }
 
-    public double get_x() {
-        return _coord.x;
+    /**
+     * @return X coordinate.
+     */
+    public double getX() {
+        return position.x;
     }
 
-    public double get_y() {
-        return _coord.y;
+    /**
+     * @return Y coordinate.
+     */
+    public double getY() {
+        return position.y;
     }
 }

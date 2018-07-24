@@ -4,5 +4,5 @@ import com.hoten.delaunay.geom.Point;
 
 public interface ICoord {
 
-    Point get_coord();
+    Point getPosition();
 }

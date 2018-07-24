@@ -1,9 +1,10 @@
 package com.hoten.delaunay.voronoi.nodename.as3delaunay;
 
+import com.hoten.delaunay.geom.GenUtils;
 import com.hoten.delaunay.geom.Point;
 import com.hoten.delaunay.geom.Rectangle;
 import java.util.HashMap;
-import java.util.Stack;
+import java.util.Map;
 
 /**
  * The line segment connecting the two Sites is part of the Delaunay
@@ -15,26 +16,51 @@ import java.util.Stack;
  */
 public final class Edge {
 
-    final private static Stack<Edge> _pool = new Stack();
+    /** Represents deleted edge in halfedges. Used in edge reordering to find out wrong edge list for reordering. */
+    public final static Edge DELETED = new Edge(-1);
+
+    /** Edge index. */
+    private int index;
+
+    /** The equation of the edge: ax + by = c. */
+    public double a, b, c;
 
     /**
-     * This is the only way to create a new Edge
+     *  Once {@link #clipVertices(Rectangle)} is called, this Map will hold two Points
+     *  representing the clipped coordinates of the left and right ends...
+     */
+    private Map<LR, Point> clippedVertices;
+
+    /**
+     * One of two Voronoi vertices that the edge connects
+     * (if one of them is null, the edge extends to infinity).
+     */
+    private Vertex leftVertex, rightVertex;
+
+    /**
+     * The two input Sites for which this Edge is a bisector. So called joins of this edge.
+     * It can be {@link LR#LEFT} or {@link LR#RIGHT}.
+     */
+    private HashMap<LR, Site> sites;
+
+    /**
+     * This is the only way to create a new Edge.
      *
-     * @param site0
-     * @param site1
-     * @return
+     * @param site0 Site 0.
+     * @param site1 Site 1.
+     * @param idx Edge index.
+     * @return Border edge between given sites.
      *
      */
-    public static Edge createBisectingEdge(Site site0, Site site1) {
-        double dx, dy, absdx, absdy;
+    public static Edge createBisectingEdge(Site site0, Site site1, int idx) {
         double a, b, c;
 
-        dx = site1.get_x() - site0.get_x();
-        dy = site1.get_y() - site0.get_y();
-        absdx = dx > 0 ? dx : -dx;
-        absdy = dy > 0 ? dy : -dy;
-        c = site0.get_x() * dx + site0.get_y() * dy + (dx * dx + dy * dy) * 0.5;
-        if (absdx > absdy) {
+        double dx = site1.getX() - site0.getX();
+        double dy = site1.getY() - site0.getY();
+
+        c = site0.getX() * dx + site0.getY() * dy + (dx * dx + dy * dy) * 0.5;
+
+        if (Math.abs(dx) > Math.abs(dy)) {
             a = 1.0;
             b = dy / dx;
             c /= dx;
@@ -44,15 +70,15 @@ public final class Edge {
             c /= dy;
         }
 
-        Edge edge = Edge.create();
+        Edge edge = new Edge(idx);
 
-        edge.set_leftSite(site0);
-        edge.set_rightSite(site1);
+        edge.setLeftSite(site0);
+        edge.setRightSite(site1);
         site0.addEdge(edge);
         site1.addEdge(edge);
 
-        edge._leftVertex = null;
-        edge._rightVertex = null;
+        edge.leftVertex = null;
+        edge.rightVertex = null;
 
         edge.a = a;
         edge.b = b;
@@ -62,197 +88,143 @@ public final class Edge {
         return edge;
     }
 
-    private static Edge create() {
-        Edge edge;
-        if (_pool.size() > 0) {
-            edge = _pool.pop();
-            edge.init();
-        } else {
-            edge = new Edge();
-        }
-        return edge;
-    }
-
-    /*final private static LINESPRITE:Sprite = new Sprite();
-     final private static GRAPHICS:Graphics = LINESPRITE.graphics;
-
-     private var _delaunayLineBmp:BitmapData;
-     internal function get delaunayLineBmp():BitmapData
-     {
-     if (!_delaunayLineBmp)
-     {
-     _delaunayLineBmp = makeDelaunayLineBmp();
-     }
-     return _delaunayLineBmp;
-     }
-
-     // making this available to Voronoi; running out of memory in AIR so I cannot cache the bmp
-     internal function makeDelaunayLineBmp():BitmapData
-     {
-     var p0:Point = leftSite.coord;
-     var p1:Point = rightSite.coord;
-
-     GRAPHICS.clear();
-     // clear() resets line style back to undefined!
-     GRAPHICS.lineStyle(0, 0, 1.0, false, LineScaleMode.NONE, CapsStyle.NONE);
-     GRAPHICS.moveTo(p0.x, p0.y);
-     GRAPHICS.lineTo(p1.x, p1.y);
-
-     var w:int = int(Math.ceil(Math.max(p0.x, p1.x)));
-     if (w < 1)
-     {
-     w = 1;
-     }
-     var h:int = int(Math.ceil(Math.max(p0.y, p1.y)));
-     if (h < 1)
-     {
-     h = 1;
-     }
-     var bmp:BitmapData = new BitmapData(w, h, true, 0);
-     bmp.draw(LINESPRITE);
-     return bmp;
-     }*/
     public LineSegment delaunayLine() {
         // draw a line connecting the input Sites for which the edge is a bisector:
-        return new LineSegment(get_leftSite().get_coord(), get_rightSite().get_coord());
+        return new LineSegment(getLeftSite().getPosition(), getRightSite().getPosition());
     }
 
     public LineSegment voronoiEdge() {
-        if (!get_visible()) {
+        if (!isVisible())
             return new LineSegment(null, null);
-        }
-        return new LineSegment(_clippedVertices.get(LR.LEFT),
-                _clippedVertices.get(LR.RIGHT));
-    }
-    private static int _nedges = 0;
-    final public static Edge DELETED = new Edge();
-    // the equation of the edge: ax + by = c
-    public double a, b, c;
-    // the two Voronoi vertices that the edge connects
-    //		(if one of them is null, the edge extends to infinity)
-    private Vertex _leftVertex;
 
-    public Vertex get_leftVertex() {
-        return _leftVertex;
-    }
-    private Vertex _rightVertex;
-
-    public Vertex get_rightVertex() {
-        return _rightVertex;
-    }
-
-    public Vertex vertex(LR leftRight) {
-        return (leftRight == LR.LEFT) ? _leftVertex : _rightVertex;
-    }
-
-    public void setVertex(LR leftRight, Vertex v) {
-        if (leftRight == LR.LEFT) {
-            _leftVertex = v;
-        } else {
-            _rightVertex = v;
-        }
-    }
-
-    public boolean isPartOfConvexHull() {
-        return (_leftVertex == null || _rightVertex == null);
-    }
-
-    public double sitesDistance() {
-        return Point.distance(get_leftSite().get_coord(), get_rightSite().get_coord());
-    }
-
-    public static double compareSitesDistances_MAX(Edge edge0, Edge edge1) {
-        double length0 = edge0.sitesDistance();
-        double length1 = edge1.sitesDistance();
-        if (length0 < length1) {
-            return 1;
-        }
-        if (length0 > length1) {
-            return -1;
-        }
-        return 0;
-    }
-
-    public static double compareSitesDistances(Edge edge0, Edge edge1) {
-        return -compareSitesDistances_MAX(edge0, edge1);
-    }
-    // Once clipVertices() is called, this Dictionary will hold two Points
-    // representing the clipped coordinates of the left and right ends...
-    private HashMap<LR, Point> _clippedVertices;
-
-    public HashMap<LR, Point> get_clippedEnds() {
-        return _clippedVertices;
-    }
-    // unless the entire Edge is outside the bounds.
-    // In that case visible will be false:
-
-    public boolean get_visible() {
-        return _clippedVertices != null;
-    }
-    // the two input Sites for which this Edge is a bisector:
-    private HashMap<LR, Site> _sites;
-
-    public void set_leftSite(Site s) {
-        _sites.put(LR.LEFT, s);
-    }
-
-    public Site get_leftSite() {
-        return _sites.get(LR.LEFT);
-    }
-
-    public void set_rightSite(Site s) {
-        _sites.put(LR.RIGHT, s);
-    }
-
-    public Site get_rightSite() {
-        return _sites.get(LR.RIGHT);
-    }
-
-    public Site site(LR leftRight) {
-        return _sites.get(leftRight);
-    }
-    private int _edgeIndex;
-
-    public void dispose() {
-        /*if (_delaunayLineBmp)
-         {
-         _delaunayLineBmp.dispose();
-         _delaunayLineBmp = null;
-         }*/
-        _leftVertex = null;
-        _rightVertex = null;
-        if (_clippedVertices != null) {
-            _clippedVertices.clear();
-            _clippedVertices = null;
-        }
-        _sites.clear();
-        _sites = null;
-
-        _pool.push(this);
-    }
-
-    private Edge() {
-        _edgeIndex = _nedges++;
-        init();
-    }
-
-    private void init() {
-        _sites = new HashMap();
-    }
-
-    public String toString() {
-        return "Edge " + _edgeIndex + "; sites " + _sites.get(LR.LEFT) + ", " + _sites.get(LR.RIGHT)
-                + "; endVertices " + (_leftVertex != null ? _leftVertex.get_vertexIndex() : "null") + ", "
-                + (_rightVertex != null ? _rightVertex.get_vertexIndex() : "null") + "::";
+        return new LineSegment(clippedVertices.get(LR.LEFT), clippedVertices.get(LR.RIGHT));
     }
 
     /**
-     * Set _clippedVertices to contain the two ends of the portion of the
-     * Voronoi edge that is visible within the bounds. If no part of the Edge
-     * falls within the bounds, leave _clippedVertices null.
+     * @return Left end of edge.
+     */
+    public Vertex getLeftVertex() {
+        return leftVertex;
+    }
+
+    /**
+     * @return Right end of edge.
+     */
+    public Vertex getRightVertex() {
+        return rightVertex;
+    }
+
+    /**
+     * @param leftRight Vertex orientation relative to themselves.
+     * @return One of the end vertices.
+     */
+    public Vertex vertex(LR leftRight) {
+        return (leftRight == LR.LEFT) ? leftVertex : rightVertex;
+    }
+
+    /**
+     * @param leftRight Vertex position relative to this edge.
+     * @param v Vertex.
+     */
+    public void setVertex(LR leftRight, Vertex v) {
+        if (leftRight == LR.LEFT) {
+            leftVertex = v;
+        } else {
+            rightVertex = v;
+        }
+    }
+
+    /**
+     * @return {@code True} if this edge have no at least one of ends.
+     */
+    public boolean isPartOfConvexHull() {
+        return (leftVertex == null || rightVertex == null);
+    }
+
+    /**
+     * @return Distance between joins of this edge.
+     */
+    public double sitesDistance() {
+        return GenUtils.distance(getLeftSite().getPosition(), getRightSite().getPosition());
+    }
+
+    /**
+     * @return Vertices clipped in boundaries.
+     */
+    public Map<LR, Point> getClippedEnds() {
+        return clippedVertices;
+    }
+
+    /**
+     * Unless the entire Edge is outside the graph bounds. In that case visible will be false:
      *
-     * @param bounds
+     * @return {@code True} if edge is inside graph bounds. Otherwise - {@code false}.
+     */
+    public boolean isVisible() {
+        return clippedVertices != null;
+    }
+
+    /**
+     * Set left site for this edge.
      *
+     * @param s Site.
+     */
+    public void setLeftSite(Site s) {
+        sites.put(LR.LEFT, s);
+    }
+
+    /**
+     * @return Left site for this edge.
+     */
+    public Site getLeftSite() {
+        return sites.get(LR.LEFT);
+    }
+
+    /**
+     * Set right site for this edge.
+     *
+     * @param s Site.
+     */
+    public void setRightSite(Site s) {
+        sites.put(LR.RIGHT, s);
+    }
+
+    /**
+     * @return Right site for this edge.
+     */
+    public Site getRightSite() {
+        return sites.get(LR.RIGHT);
+    }
+
+    /**
+     * @param leftRight Site orientation relative to the edge.
+     * @return Site for given orientation.
+     */
+    public Site site(LR leftRight) {
+        return sites.get(leftRight);
+    }
+
+    /**
+     * @param idx Edge index.
+     */
+    private Edge(int idx) {
+        sites = new HashMap<>();
+        index = idx;
+    }
+
+    /** {@inheritDoc} */
+    @Override public String toString() {
+        return "Edge " + index + "; sites " + sites.get(LR.LEFT) + ", " + sites.get(LR.RIGHT)
+            + "; endVertices " + (leftVertex != null ? leftVertex.getIndex() : "null") + ", "
+            + (rightVertex != null ? rightVertex.getIndex() : "null") + "::";
+    }
+
+    /**
+     * Set clippedVertices to contain the two ends of the portion of the
+     * Voronoi edge that is visible within the graph bounds. If no part of the Edge
+     * falls within the bounds, leave clippedVertices null.
+     *
+     * @param bounds Graph bounds.
      */
     public void clipVertices(Rectangle bounds) {
         double xmin = bounds.x;
@@ -264,17 +236,17 @@ public final class Edge {
         double x0, x1, y0, y1;
 
         if (a == 1.0 && b >= 0.0) {
-            vertex0 = _rightVertex;
-            vertex1 = _leftVertex;
+            vertex0 = rightVertex;
+            vertex1 = leftVertex;
         } else {
-            vertex0 = _leftVertex;
-            vertex1 = _rightVertex;
+            vertex0 = leftVertex;
+            vertex1 = rightVertex;
         }
 
         if (a == 1.0) {
             y0 = ymin;
-            if (vertex0 != null && vertex0.get_y() > ymin) {
-                y0 = vertex0.get_y();
+            if (vertex0 != null && vertex0.getY() > ymin) {
+                y0 = vertex0.getY();
             }
             if (y0 > ymax) {
                 return;
@@ -282,8 +254,8 @@ public final class Edge {
             x0 = c - b * y0;
 
             y1 = ymax;
-            if (vertex1 != null && vertex1.get_y() < ymax) {
-                y1 = vertex1.get_y();
+            if (vertex1 != null && vertex1.getY() < ymax) {
+                y1 = vertex1.getY();
             }
             if (y1 < ymin) {
                 return;
@@ -311,8 +283,8 @@ public final class Edge {
             }
         } else {
             x0 = xmin;
-            if (vertex0 != null && vertex0.get_x() > xmin) {
-                x0 = vertex0.get_x();
+            if (vertex0 != null && vertex0.getX() > xmin) {
+                x0 = vertex0.getX();
             }
             if (x0 > xmax) {
                 return;
@@ -320,8 +292,8 @@ public final class Edge {
             y0 = c - a * x0;
 
             x1 = xmax;
-            if (vertex1 != null && vertex1.get_x() < xmax) {
-                x1 = vertex1.get_x();
+            if (vertex1 != null && vertex1.getX() < xmax) {
+                x1 = vertex1.getX();
             }
             if (x1 < xmin) {
                 return;
@@ -349,13 +321,14 @@ public final class Edge {
             }
         }
 
-        _clippedVertices = new HashMap();
-        if (vertex0 == _leftVertex) {
-            _clippedVertices.put(LR.LEFT, new Point(x0, y0));
-            _clippedVertices.put(LR.RIGHT, new Point(x1, y1));
+        clippedVertices = new HashMap<>();
+
+        if (vertex0 == leftVertex) {
+            clippedVertices.put(LR.LEFT, new Point(x0, y0));
+            clippedVertices.put(LR.RIGHT, new Point(x1, y1));
         } else {
-            _clippedVertices.put(LR.RIGHT, new Point(x0, y0));
-            _clippedVertices.put(LR.LEFT, new Point(x1, y1));
+            clippedVertices.put(LR.RIGHT, new Point(x0, y0));
+            clippedVertices.put(LR.LEFT, new Point(x1, y1));
         }
     }
 }

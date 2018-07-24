@@ -1,5 +1,6 @@
 package com.hoten.delaunay.voronoi;
 
+import com.hoten.delaunay.geom.GenUtils;
 import com.hoten.delaunay.geom.Point;
 import com.hoten.delaunay.geom.Rectangle;
 import com.hoten.delaunay.voronoi.groundshapes.HeightAlgorithm;
@@ -9,6 +10,7 @@ import com.hoten.delaunay.voronoi.nodename.as3delaunay.Voronoi;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.*;
+import java.util.List;
 
 /**
  * VoronoiGraph.java
@@ -17,40 +19,25 @@ import java.util.*;
  */
 public abstract class VoronoiGraph {
 
-    private final ArrayList<Edge> edges = new ArrayList<>();
-    private final ArrayList<Corner> corners = new ArrayList<>();
-    private final ArrayList<Center> centers = new ArrayList<>();
+    private final List<Edge> edges = new ArrayList<>();
+    private final List<Corner> corners = new ArrayList<>();
+    private final List<Center> centers = new ArrayList<>();
     private final Rectangle bounds;
     private final Random r;
-    protected Color OCEAN, RIVER, LAKE, BEACH;
     private final BufferedImage pixelCenterMap;
+    protected Color OCEAN, RIVER, LAKE, BEACH;
 
+    /**
+     * @param v Voronoi structure.
+     * @param numLloydRelaxations Amount of Lloyd relaxations.
+     * @param r Randomizer.
+     * @param algorithm Ground shape algorithm.
+     */
     public VoronoiGraph(Voronoi v, int numLloydRelaxations, Random r, HeightAlgorithm algorithm) {
         this.r = r;
-        bounds = v.get_plotBounds();
+        bounds = v.getPlotBounds();
 
-        for (int i = 0; i < numLloydRelaxations; i++) {
-            ArrayList<Point> points = v.siteCoords();
-
-            for (Point p : points) {
-                ArrayList<Point> region = v.region(p);
-
-                double x = 0;
-                double y = 0;
-
-                for (Point c : region) {
-                    x += c.x;
-                    y += c.y;
-                }
-
-                x /= region.size();
-                y /= region.size();
-                p.x = x;
-                p.y = y;
-            }
-
-            v = new Voronoi(points, null, v.get_plotBounds());
-        }
+        v = relaxGraph(v, numLloydRelaxations);
 
         buildGraph(v);
         improveCorners();
@@ -69,6 +56,41 @@ public abstract class VoronoiGraph {
         assignBiomes();
 
         pixelCenterMap = new BufferedImage((int) bounds.width, (int) bounds.width, BufferedImage.TYPE_4BYTE_ABGR);
+    }
+
+    /**
+     * Isn't Lloyd relaxation, but it's easy workaround.
+     *
+     * @param v Voronoi structure.
+     * @param numLloydRelaxations Amount of relaxation steps.
+     * @return Voronoi structure with more evenly distributed points.
+     */
+    private Voronoi relaxGraph(Voronoi v, int numLloydRelaxations) {
+        for (int i = 0; i < numLloydRelaxations; i++) {
+            List<Point> points = v.siteCoords();
+
+            for (Point p : points) {
+                List<Point> region = v.region(p);
+
+                double x = 0;
+                double y = 0;
+
+                for (Point r : region) {
+                    x += r.x;
+                    y += r.y;
+                }
+
+                x /= region.size();
+                y /= region.size();
+
+                p.x = x;
+                p.y = y;
+            }
+
+            v = new Voronoi(points, v.getPlotBounds());
+        }
+
+        return v;
     }
 
     abstract protected Enum getBiome(Center p);
@@ -105,9 +127,8 @@ public abstract class VoronoiGraph {
 
     private Edge edgeWithCenters(Center c1, Center c2) {
         for (Edge e : c1.borders) {
-            if (e.d0 == c2 || e.d1 == c2) {
+            if (e.d0 == c2 || e.d1 == c2)
                 return e;
-            }
         }
 
         return null;
@@ -126,10 +147,6 @@ public abstract class VoronoiGraph {
         g.fillPolygon(x, y, 3);
     }
 
-    private boolean closeEnough(double d1, double d2, double diff) {
-        return Math.abs(d1 - d2) <= diff;
-    }
-
     public BufferedImage createMap() {
         int width = (int) bounds.width;
         int height = (int) bounds.height;
@@ -144,7 +161,7 @@ public abstract class VoronoiGraph {
     }
 
     private void paint(Graphics2D g) {
-        paint(g, true, true, false, false, false, true);
+        paint(g, true, true, true, true, true, true);
     }
 
     private void drawPolygon(Graphics2D g, Center c, Color color) {
@@ -194,7 +211,7 @@ public abstract class VoronoiGraph {
             //with a more useful number of sites. 
             //TODO: find a way to fix this
 
-            if (closeEnough(edgeCorner1.loc.x, edgeCorner2.loc.x, 1)) {
+            if (GenUtils.closeEnough(edgeCorner1.loc.x, edgeCorner2.loc.x, 1)) {
                 drawTriangle(g, edgeCorner1, edgeCorner2, c);
             } else {
                 int[] x = new int[4];
@@ -205,10 +222,10 @@ public abstract class VoronoiGraph {
                 y[1] = (int) edgeCorner1.loc.y;
 
                 //determine which corner this is
-                x[2] = (int) ((closeEnough(edgeCorner1.loc.x, bounds.x, 1) ||
-                    closeEnough(edgeCorner2.loc.x, bounds.x, .5)) ? bounds.x : bounds.right);
-                y[2] = (int) ((closeEnough(edgeCorner1.loc.y, bounds.y, 1) ||
-                    closeEnough(edgeCorner2.loc.y, bounds.y, .5)) ? bounds.y : bounds.bottom);
+                x[2] = (int) ((GenUtils.closeEnough(edgeCorner1.loc.x, bounds.x, 1) ||
+                    GenUtils.closeEnough(edgeCorner2.loc.x, bounds.x, .5)) ? bounds.x : bounds.right);
+                y[2] = (int) ((GenUtils.closeEnough(edgeCorner1.loc.y, bounds.y, 1) ||
+                    GenUtils.closeEnough(edgeCorner2.loc.y, bounds.y, .5)) ? bounds.y : bounds.bottom);
 
                 x[3] = (int) edgeCorner2.loc.x;
                 y[3] = (int) edgeCorner2.loc.y;
@@ -225,11 +242,12 @@ public abstract class VoronoiGraph {
         final int numSites = centers.size();
 
         Color[] defaultColors = null;
+
         if (!drawBiomes) {
             defaultColors = new Color[numSites];
-            for (int i = 0; i < defaultColors.length; i++) {
+
+            for (int i = 0; i < defaultColors.length; i++)
                 defaultColors[i] = new Color(r.nextInt(255), r.nextInt(255), r.nextInt(255));
-            }
         }
 
         Graphics2D pixelCenterGraphics = pixelCenterMap.createGraphics();
@@ -238,6 +256,11 @@ public abstract class VoronoiGraph {
         for (Center c : centers) {
             drawPolygon(g, c, drawBiomes ? getColor(c.biome) : defaultColors[c.index]);
             drawPolygon(pixelCenterGraphics, c, new Color(c.index));
+            /*Stroke s = g.getStroke();
+            g.setStroke(new BasicStroke(5));
+            g.setColor(Color.WHITE);
+            g.drawString(c.loc.toString(), (int)c.loc.x, (int)c.loc.y);
+            g.setStroke(s);*/
         }
 
         for (Edge e : edges) {
@@ -265,19 +288,43 @@ public abstract class VoronoiGraph {
             g.setColor(Color.WHITE);
             corners.stream().forEach((c) -> {
                 g.fillOval((int) (c.loc.x - 2), (int) (c.loc.y - 2), 4, 4);
+                /*Stroke s = g.getStroke();
+                g.setStroke(new BasicStroke(5));
+                g.setColor(Color.WHITE);
+                g.drawString(c.loc.toString(), (int)c.loc.x, (int)c.loc.y);
+                g.setStroke(s);*/
             });
         }
+
         g.setColor(Color.WHITE);
         g.drawRect((int) bounds.x, (int) bounds.y, (int) bounds.width, (int) bounds.height);
+
+        //TODO remove test paint
+        /*for (Center center : centers) {
+            ArrayList<Point> l = vor.region(center.loc);
+            for (Point c : l) {
+                Stroke s = g.getStroke();
+                g.setStroke(new BasicStroke(5));
+                g.setColor(Color.GREEN);
+                g.fillOval((int) (c.x - 2), (int) (c.y - 2), 4, 4);
+                g.drawString(c.toString(), (int)c.x, (int)c.y);
+                g.setStroke(s);
+            }
+        }*/
     }
 
     private void buildGraph(Voronoi v) {
-        final HashMap<Point, Center> pointCenterMap = new HashMap<>();
-        final ArrayList<Point> points = v.siteCoords();
+        Map<Point, Center> pointCenterMap = generateCenters(v);
+
+        generateEdges(v, pointCenterMap);
+    }
+
+    private Map<Point, Center> generateCenters(Voronoi v) {
+        Map<Point, Center> pointCenterMap = new HashMap<>();
+        List<Point> points = v.siteCoords();
+
         points.stream().forEach((p) -> {
-            Center c = new Center();
-            c.loc = p;
-            c.index = centers.size();
+            Center c = new Center(centers.size(), p);
             centers.add(c);
             pointCenterMap.put(p, c);
         });
@@ -287,12 +334,16 @@ public abstract class VoronoiGraph {
             v.region(c.loc);
         });
 
-        final ArrayList<com.hoten.delaunay.voronoi.nodename.as3delaunay.Edge> libedges = v.edges();
-        final HashMap<Integer, Corner> pointCornerMap = new HashMap();
+        return pointCenterMap;
+    }
 
-        for (com.hoten.delaunay.voronoi.nodename.as3delaunay.Edge libedge : libedges) {
-            final LineSegment vEdge = libedge.voronoiEdge();
-            final LineSegment dEdge = libedge.delaunayLine();
+    private void generateEdges(Voronoi v, Map<Point, Center> pointCenterMap) {
+        final List<com.hoten.delaunay.voronoi.nodename.as3delaunay.Edge> libEdges = v.edges();
+        final Map<Integer, Corner> pointCornerMap = new HashMap<>();
+
+        for (com.hoten.delaunay.voronoi.nodename.as3delaunay.Edge libEdge : libEdges) {
+            final LineSegment vEdge = libEdge.voronoiEdge();
+            final LineSegment dEdge = libEdge.delaunayLine();
 
             final Edge edge = new Edge();
             edge.index = edges.size();
@@ -353,23 +404,20 @@ public abstract class VoronoiGraph {
 
     // Helper functions for the following for loop; ideally these
     // would be inlined
-    private void addToCornerList(ArrayList<Corner> list, Corner c) {
-        if (c != null && !list.contains(c)) {
+    private void addToCornerList(List<Corner> list, Corner c) {
+        if (c != null && !list.contains(c))
             list.add(c);
-        }
     }
 
-    private void addToCenterList(ArrayList<Center> list, Center c) {
-        if (c != null && !list.contains(c)) {
+    private void addToCenterList(List<Center> list, Center c) {
+        if (c != null && !list.contains(c))
             list.add(c);
-        }
     }
 
     //ensures that each corner is represented by only one corner object
-    private Corner makeCorner(HashMap<Integer, Corner> pointCornerMap, Point p) {
-        if (p == null) {
+    private Corner makeCorner(Map<Integer, Corner> pointCornerMap, Point p) {
+        if (p == null)
             return null;
-        }
 
         int index = (int) ((int) p.x + (int) (p.y) * bounds.width * 2);
 
@@ -389,7 +437,7 @@ public abstract class VoronoiGraph {
     }
 
     private void assignCornerElevations(HeightAlgorithm algorithm) {
-        LinkedList<Corner> queue = new LinkedList<>();
+        Deque<Corner> queue = new LinkedList<>();
 
         for (Corner c : corners) {
             c.water = algorithm.isWater(c.loc, bounds, r);
@@ -421,7 +469,7 @@ public abstract class VoronoiGraph {
     }
 
     private void assignOceanCoastAndLand() {
-        LinkedList<Center> queue = new LinkedList<>();
+        Deque<Center> queue = new LinkedList<>();
         final double waterThreshold = .3;
 
         for (final Center center : centers) {
@@ -479,32 +527,22 @@ public abstract class VoronoiGraph {
         }
     }
 
-    private ArrayList<Corner> landCorners() {
-        final ArrayList<Corner> list = new ArrayList<>();
+    private List<Corner> landCorners() {
+        List<Corner> list = new ArrayList<>();
 
         for (Corner c : corners) {
-            if (!c.ocean && !c.coast) {
+            if (!c.ocean && !c.coast)
                 list.add(c);
-            }
         }
 
         return list;
     }
 
-    private void redistributeElevations(ArrayList<Corner> landCorners) {
-        Collections.sort(landCorners, new Comparator<Corner>() {
-            @Override
-            public int compare(Corner o1, Corner o2) {
-                if (o1.elevation > o2.elevation) {
-                    return 1;
-                } else if (o1.elevation < o2.elevation) {
-                    return -1;
-                }
-                return 0;
-            }
-        });
+    private void redistributeElevations(List<Corner> landCorners) {
+        landCorners.sort(Comparator.comparingDouble(c -> c.elevation));
 
         final double SCALE_FACTOR = 1.1;
+
         for (int i = 0; i < landCorners.size(); i++) {
             double y = (double) i / landCorners.size();
             double x = Math.sqrt(SCALE_FACTOR) - Math.sqrt(SCALE_FACTOR * (1 - y));
@@ -513,9 +551,8 @@ public abstract class VoronoiGraph {
         }
 
         for (Corner c : corners) {
-            if (c.ocean || c.coast) {
+            if (c.ocean || c.coast)
                 c.elevation = 0.0;
-            }
         }
     }
 
@@ -523,9 +560,8 @@ public abstract class VoronoiGraph {
         for (Center center : centers) {
             double total = 0;
 
-            for (Corner c : center.corners) {
+            for (Corner c : center.corners)
                 total += c.elevation;
-            }
 
             center.elevation = total / center.corners.size();
         }
@@ -537,9 +573,8 @@ public abstract class VoronoiGraph {
             //System.out.println("ME: " + c.elevation);
             for (Corner a : c.adjacent) {
                 //System.out.println(a.elevation);
-                if (a.elevation <= down.elevation) {
+                if (a.elevation <= down.elevation)
                     down = a;
-                }
             }
 
             c.downslope = down;
@@ -575,15 +610,15 @@ public abstract class VoronoiGraph {
 
     private Edge lookupEdgeFromCorner(Corner c, Corner downslope) {
         for (Edge e : c.protrudes) {
-            if (e.v0 == downslope || e.v1 == downslope) {
+            if (e.v0 == downslope || e.v1 == downslope)
                 return e;
-            }
         }
+
         return null;
     }
 
     private void assignCornerMoisture() {
-        LinkedList<Corner> queue = new LinkedList<>();
+        Deque<Corner> queue = new LinkedList<>();
 
         for (Corner c : corners) {
             if ((c.water || c.river > 0) && !c.ocean) {
@@ -596,8 +631,10 @@ public abstract class VoronoiGraph {
 
         while (!queue.isEmpty()) {
             Corner c = queue.pop();
+
             for (Corner a : c.adjacent) {
                 double newM = .9 * c.moisture;
+
                 if (newM > a.moisture) {
                     a.moisture = newM;
                     queue.add(a);
@@ -607,45 +644,31 @@ public abstract class VoronoiGraph {
 
         // Salt water
         for (Corner c : corners) {
-            if (c.ocean || c.coast) {
+            if (c.ocean || c.coast)
                 c.moisture = 1.0;
-            }
         }
     }
 
-    private void redistributeMoisture(ArrayList<Corner> landCorners) {
-        Collections.sort(landCorners, new Comparator<Corner>() {
-            @Override
-            public int compare(Corner o1, Corner o2) {
-                if (o1.moisture > o2.moisture) {
-                    return 1;
-                } else if (o1.moisture < o2.moisture) {
-                    return -1;
-                }
-                return 0;
-            }
-        });
+    private void redistributeMoisture(List<Corner> landCorners) {
+        landCorners.sort(Comparator.comparingDouble(c -> c.moisture));
 
-        for (int i = 0; i < landCorners.size(); i++) {
+        for (int i = 0; i < landCorners.size(); i++)
             landCorners.get(i).moisture = (double) i / landCorners.size();
-        }
     }
 
     private void assignPolygonMoisture() {
         for (Center center : centers) {
             double total = 0;
 
-            for (Corner c : center.corners) {
+            for (Corner c : center.corners)
                 total += c.moisture;
-            }
 
             center.moisture = total / center.corners.size();
         }
     }
 
     private void assignBiomes() {
-        for (Center center : centers) {
+        for (Center center : centers)
             center.biome = getBiome(center);
-        }
     }
 }
